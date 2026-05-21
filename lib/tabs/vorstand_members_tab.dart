@@ -3,7 +3,7 @@ import 'package:pocketbase/pocketbase.dart';
 
 import '../main.dart';
 
-/// Dialog zum Anlegen / Bearbeiten eines Mitglieds
+/// (Optional) alter Dialog – wird aktuell nicht benutzt, kann später gelöscht werden.
 Future<void> showMemberEditDialog(
   BuildContext context, {
   RecordModel? member,
@@ -189,7 +189,7 @@ Future<void> showMemberEditDialog(
   );
 }
 
-/// HIER ist die gesuchte Klasse:
+/// Haupt-Tab: Mitgliederliste
 class VorstandMembersTab extends StatefulWidget {
   final int permission; // 1: sehen, 2: +hinzufügen, 3: +löschen, 4: +rechte
   const VorstandMembersTab({super.key, required this.permission});
@@ -435,7 +435,7 @@ class _VorstandMembersPermTabState extends State<VorstandMembersPermTab> {
     }
   }
 
-    @override
+  @override
   Widget build(BuildContext context) {
     final name = widget.member.getStringValue('name');
 
@@ -557,6 +557,8 @@ class _VorstandMembersPermTabState extends State<VorstandMembersPermTab> {
     );
   }
 }
+
+/// Mitglied anlegen
 class VorstandMembersCreateTab extends StatefulWidget {
   const VorstandMembersCreateTab({super.key});
 
@@ -701,6 +703,8 @@ class _VorstandMembersCreateTabState extends State<VorstandMembersCreateTab> {
     );
   }
 }
+
+/// Mitglied bearbeiten
 class VorstandMembersEditTab extends StatefulWidget {
   final RecordModel member;
 
@@ -768,10 +772,10 @@ class _VorstandMembersEditTabState extends State<VorstandMembersEditTab> {
       "bank_owner": bankOwnerController.text.trim(),
     };
 
-    final pw = passwordController.text.trim();
-    if (pw.isNotEmpty) {
-      body["password"] = pw;
-      body["passwordConfirm"] = pw;
+    final newPassword = passwordController.text.trim();
+    if (newPassword.isNotEmpty) {
+      body["password"] = newPassword;
+      body["passwordConfirm"] = newPassword;
     }
 
     try {
@@ -785,7 +789,7 @@ class _VorstandMembersEditTabState extends State<VorstandMembersEditTab> {
       debugPrint("Fehler beim Aktualisieren: $e");
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Speichern fehlgeschlagen.")),
+        const SnackBar(content: Text("Aktualisierung fehlgeschlagen.")),
       );
     } finally {
       if (mounted) setState(() => _saving = false);

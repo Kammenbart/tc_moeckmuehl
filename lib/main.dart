@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:pocketbase/pocketbase.dart';
 import 'package:intl/date_symbol_data_local.dart'; // Für deutsches Datum
+import 'package:flutter_localizations/flutter_localizations.dart'; //für deutschen Kalender
 
 import 'tabs/home_tab.dart';
 import 'tabs/court_tab.dart';
@@ -90,6 +91,15 @@ class TCMoeckmuehlApp extends StatelessWidget {
             return MaterialApp(
               title: 'TC Möckmühl',
               debugShowCheckedModeBanner: false,
+              localizationsDelegates: const [
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              supportedLocales: const [
+                Locale('de', 'DE'),
+              ],
+              locale: const Locale('de', 'DE'),
               theme: ThemeData(
                 colorSchemeSeed: frontColor,          // Akzent/Vordergrund
                 scaffoldBackgroundColor: backColor,   // Hintergrund
@@ -118,102 +128,161 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
+  final nameController = TextEditingController(); // Neu für Registrierung
   bool isLoading = false;
+  bool isLoginMode = true; // Schalter zwischen Login und Registrierung
 
   @override
   Widget build(BuildContext context) {
-    // Wenn wir eingeloggt sind, zeige direkt den HomeScreen
     if (pb.authStore.isValid) return const HomeScreen();
 
-    // Ansonsten zeige den Login-Screen
     return Scaffold(
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.sports_tennis, size: 80, color: Colors.green),
-            const SizedBox(height: 10),
-            const Text(
-              "TC Möckmühl",
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 30),
-            TextField(
-              controller: emailController,
-              decoration: const InputDecoration(
-                labelText: "E-Mail",
-                border: OutlineInputBorder(),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.sports_tennis, size: 80, color: Colors.green),
+              const SizedBox(height: 10),
+              Text(
+                isLoginMode ? "TC Möckmühl Login" : "Konto erstellen",
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
-            ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: passwordController,
-              decoration: const InputDecoration(
-                labelText: "Passwort",
-                border: OutlineInputBorder(),
-              ),
-              obscureText: true,
-            ),
-            const SizedBox(height: 20),
-            if (isLoading)
-              const CircularProgressIndicator()
-            else
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50),
+              const SizedBox(height: 30),
+              
+              // Name Feld (nur bei Registrierung sichtbar)
+              if (!isLoginMode) ...[
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: "Vollständiger Name",
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person),
+                  ),
                 ),
-                onPressed: () async {
-                  setState(() => isLoading = true);
-                  try {
-                    await pb.collection('users').authWithPassword(
-                      emailController.text.trim(),
-                      passwordController.text,
-                    );
-                    setState(() {}); // HomeScreen
-                  } catch (e) {
-                    if (!mounted) return;
+                const SizedBox(height: 15),
+              ],
 
-                    final msg = e.toString();
-
-                    // 1. Kein Server erreichbar (z.B. SocketException, Connect failed)
-                    final isNetworkError = msg.contains('SocketException') ||
-                        msg.contains('Connection refused') ||
-                        msg.contains('Failed host lookup') ||
-                        msg.contains('Connection timed out');
-
-                    if (isNetworkError) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            "Keine Verbindung zum Server.\n"
-                            "Bitte prüfen, ob PocketBase läuft und IP/Port stimmen.",
-                          ),
-                          backgroundColor: Colors.orange,
-                        ),
-                      );
-                      return;
-                    }
-
-                    // 2. Alles andere -> klassischer Login-Fehler
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text("Login fehlgeschlagen! Zugangsdaten prüfen."),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  } finally {
-                    if (mounted) {
-                      setState(() => isLoading = false);
-                    }
-                  }
-                },
-                child: const Text("Einloggen"),
+              TextField(
+                controller: emailController,
+                decoration: const InputDecoration(
+                  labelText: "E-Mail",
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.email),
+                ),
+                keyboardType: TextInputType.emailAddress,
               ),
-          ],
+              const SizedBox(height: 15),
+              TextField(
+                controller: passwordController,
+                decoration: const InputDecoration(
+                  labelText: "Passwort",
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.lock),
+                ),
+                obscureText: true,
+              ),
+              
+              // Passwort vergessen (nur im Login-Modus)
+              if (isLoginMode)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _resetPassword,
+                    child: const Text("Passwort vergessen?"),
+                  ),
+                ),
+
+              const SizedBox(height: 20),
+              if (isLoading)
+                const CircularProgressIndicator()
+              else
+                Column(
+                  children: [
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 50),
+                        backgroundColor: appFrontColor.value,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: isLoginMode ? _login : _register,
+                      child: Text(isLoginMode ? "Einloggen" : "Registrieren"),
+                    ),
+                    const SizedBox(height: 15),
+                    TextButton(
+                      onPressed: () => setState(() => isLoginMode = !isLoginMode),
+                      child: Text(isLoginMode 
+                        ? "Noch kein Konto? Hier registrieren" 
+                        : "Bereits ein Konto? Zum Login"),
+                    ),
+                  ],
+                ),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  // --- LOGIK FUNKTIONEN ---
+
+  Future<void> _login() async {
+    setState(() => isLoading = true);
+    try {
+      await pb.collection('users').authWithPassword(
+        emailController.text.trim(),
+        passwordController.text,
+      );
+      setState(() {}); // Wechsel zum HomeScreen
+    } catch (e) {
+      _showError("Login fehlgeschlagen. Daten prüfen.");
+    } finally {
+      setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> _register() async {
+    if (nameController.text.isEmpty || emailController.text.isEmpty || passwordController.text.length < 8) {
+      _showError("Bitte alle Felder füllen (Passwort min. 8 Zeichen).");
+      return;
+    }
+    setState(() => isLoading = true);
+    try {
+      await pb.collection('users').create(body: {
+        "email": emailController.text.trim(),
+        "password": passwordController.text,
+        "passwordConfirm": passwordController.text,
+        "name": nameController.text.trim(),
+      });
+      // Nach Registrierung direkt einloggen
+      await _login();
+    } catch (e) {
+      _showError("Registrierung fehlgeschlagen: $e");
+    } finally {
+      setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> _resetPassword() async {
+    if (emailController.text.isEmpty) {
+      _showError("Bitte E-Mail eingeben, um Passwort zurückzusetzen.");
+      return;
+    }
+    try {
+      await pb.collection('users').requestPasswordReset(emailController.text.trim());
+      _showSuccess("E-Mail zum Zurücksetzen wurde gesendet!");
+    } catch (e) {
+      _showError("Fehler: $e");
+    }
+  }
+
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
+  }
+
+  void _showSuccess(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green));
   }
 }
 
@@ -226,9 +295,12 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _index = 0;
-  void jumpToCourtTab() {
+  DateTime? _targetDate;
+
+  void jumpToCourtTab(DateTime date) {
     setState(() {
-      _index = 1; // Wechselt zum Reiter "Plätze"
+      _targetDate = date; // Datum speichern
+      _index = 1;         // Tab wechseln
     });
   }
   
@@ -286,11 +358,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
         return Scaffold(
-      body: IndexedStack(
+            body: IndexedStack(
         index: _index,
         children: [
-          HomeTab(onNavigateToCourt: jumpToCourtTab),
-          const CourtTab(),
+          HomeTab(onNavigateToCourt: jumpToCourtTab), // Kein const!
+          CourtTab(key: ValueKey(_targetDate), initialDate: _targetDate), // Kein const!
           const DrinkTab(),
           ProfileTab(onLogout: () => setState(() => pb.authStore.clear())),
         ],

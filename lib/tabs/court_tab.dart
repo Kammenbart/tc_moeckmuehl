@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:pocketbase/pocketbase.dart';
 import 'package:intl/intl.dart';
 import '../main.dart';
+
 class CourtTab extends StatefulWidget {
-  const CourtTab({super.key});
+  final DateTime? initialDate; // 1. Diese Zeile hinzufügen
+  const CourtTab({super.key, this.initialDate}); // 2. Konstruktor anpassen
 
   @override
   State<CourtTab> createState() => _CourtTabState();
 }
 
 class _CourtTabState extends State<CourtTab> {
-  DateTime _selectedDate = DateTime.now();
+  // Ändere DateTime _selectedDate = DateTime.now(); in:
+  late DateTime _selectedDate; 
   List<RecordModel> courts = [];
   List<RecordModel> bookings = [];
   List<RecordModel> allUsers = [];
@@ -19,6 +22,8 @@ class _CourtTabState extends State<CourtTab> {
   @override
   void initState() {
     super.initState();
+
+    _selectedDate = widget.initialDate ?? DateTime.now();
     _refreshData();
   }
 
@@ -73,8 +78,9 @@ class _CourtTabState extends State<CourtTab> {
               final picked = await showDatePicker(
                 context: context,
                 initialDate: _selectedDate,
-                firstDate: DateTime.now().subtract(const Duration(days: 7)),
-                lastDate: DateTime.now().add(const Duration(days: 30)),
+                firstDate: DateTime.now().subtract(const Duration(days: 30)),
+                lastDate: DateTime.now().add(const Duration(days: 90)),
+                locale: const Locale('de', 'DE'),
               );
               if (picked != null) {
                 setState(() => _selectedDate = picked);
@@ -84,132 +90,121 @@ class _CourtTabState extends State<CourtTab> {
           )
         ],
       ),
-      body: isLoading 
-        ? const Center(child: CircularProgressIndicator())
-        : Column(
-            children: [
-              // 1. Datumsanzeige
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                color: appFrontColor.value,
-                child: Text(
-                  DateFormat('EEEE, dd. MMMM yyyy', 'de_DE').format(_selectedDate),
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-
-              // 2. Kopfzeile mit Platznamen
-              Container(
-                color: Colors.grey.shade200,
-                child: Row(
-                  children: [
-                    const SizedBox(width: 60), 
-                    ...courts.map((c) => Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Text(
-                          c.getStringValue('name'),
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    )),
-                  ],
-                ),
-              ),
-
-              // 3. Scrollbares Grid
-              Expanded(
-                child: ListView.builder(
-                  itemCount: 28, // 8:00 bis 22:00 Uhr
-                  itemBuilder: (context, index) {
-                    final hour = 8 + (index ~/ 2);
-                    final minute = (index % 2) * 30;
-                    
-                    final cellTime = DateTime(
-                      _selectedDate.year, _selectedDate.month, _selectedDate.day, hour, minute
-                    );
-                    
-                    final timeString = "${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}";
-
-                    return IntrinsicHeight(
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 60,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+      body: GestureDetector(
+        onHorizontalDragEnd: (details) {
+          if (details.primaryVelocity! > 0) {
+            setState(() => _selectedDate = _selectedDate.subtract(const Duration(days: 1)));
+            _refreshData();
+          } else if (details.primaryVelocity! < 0) {
+            setState(() => _selectedDate = _selectedDate.add(const Duration(days: 1)));
+            _refreshData();
+          }
+        },
+        child: isLoading 
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _refreshData,
+              child: Column(
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    color: appFrontColor.value,
+                    child: Text(
+                      DateFormat('EEEE, dd. MMMM yyyy', 'de_DE').format(_selectedDate),
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  Container(
+                    color: Colors.grey.shade200,
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 60), 
+                        ...courts.map((c) => Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Text(
+                              c.getStringValue('name'),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
                             ),
-                            child: Text(timeString, style: const TextStyle(fontSize: 12)),
                           ),
-                          ...courts.map((court) {
-                            final booking = _getBooking(court.id, cellTime);
-                            final isBooked = booking != null;
+                        )),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemCount: 28, 
+                      itemBuilder: (context, index) {
+                        final hour = 8 + (index ~/ 2);
+                        final minute = (index % 2) * 30;
+                        final cellTime = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, hour, minute);
+                        final timeString = "${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}";
 
-                            // --- NEU: FARBLOGIK ---
-                            Color cellColor = Colors.white;
-                            if (isBooked) {
-                              final isOwner = booking.getStringValue('user') == currentUserId;
-                              final playerIds = booking.getListValue('players');
-                              final isPlayer = playerIds.contains(currentUserId);
+                        return IntrinsicHeight(
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 60,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.grey.shade300))),
+                                child: Text(timeString, style: const TextStyle(fontSize: 12)),
+                              ),
+                              ...courts.map((court) {
+                                final booking = _getBooking(court.id, cellTime);
+                                final isBooked = booking != null;
 
-                              if (isOwner || isPlayer) {
-                                // Eigene Buchung (transparent blau)
-                                cellColor = ownBookingColor.value.withOpacity(0.3);
-                              } else {
-                                // Fremde Buchung (transparent rot)
-                                cellColor = otherBookingColor.value.withOpacity(0.3);
-                              }
-                            }
+                                Color cellColor = Colors.white;
+                                if (isBooked) {
+                                  final isOwner = booking.getStringValue('user') == currentUserId;
+                                  final playerIds = booking.getListValue('players');
+                                  cellColor = (isOwner || playerIds.contains(currentUserId))
+                                      ? ownBookingColor.value.withOpacity(0.3)
+                                      : otherBookingColor.value.withOpacity(0.3);
+                                }
 
-                            final prevTime = cellTime.subtract(const Duration(minutes: 30));
-                            final bookingAbove = _getBooking(court.id, prevTime);
-                            final isSameAsAbove = isBooked && bookingAbove?.id == booking.id;
+                                final prevTime = cellTime.subtract(const Duration(minutes: 30));
+                                final isSameAsAbove = isBooked && _getBooking(court.id, prevTime)?.id == booking.id;
+                                final nextTime = cellTime.add(const Duration(minutes: 30));
+                                final isSameAsBelow = isBooked && _getBooking(court.id, nextTime)?.id == booking.id;
 
-                            final nextTime = cellTime.add(const Duration(minutes: 30));
-                            final bookingBelow = _getBooking(court.id, nextTime);
-                            final isSameAsBelow = isBooked && bookingBelow?.id == booking.id;
-
-                            return Expanded(
-                              child: GestureDetector(
-                                onTap: () => isBooked ? _showBookingInfo(booking) : _showBookingDialog(court, cellTime),
-                                child: Container(
-                                  height: 45,
-                                  decoration: BoxDecoration(
-                                    color: cellColor, // Hier wird die neue Farbe angewandt
-                                    border: Border(
-                                      left: BorderSide(color: Colors.grey.shade300, width: 0.5),
-                                      right: BorderSide(color: Colors.grey.shade300, width: 0.5),
-                                      top: isSameAsAbove 
-                                          ? BorderSide.none 
-                                          : BorderSide(color: Colors.grey.shade400, width: 0.5),
-                                      bottom: isSameAsBelow 
-                                          ? BorderSide.none 
-                                          : BorderSide(color: Colors.grey.shade400, width: 0.5),
+                                return Expanded(
+                                  child: GestureDetector(
+                                    onTap: () => isBooked ? _showBookingInfo(booking) : _showBookingDialog(court, cellTime),
+                                    child: Container(
+                                      height: 45,
+                                      decoration: BoxDecoration(
+                                        color: cellColor,
+                                        border: Border(
+                                          left: BorderSide(color: Colors.grey.shade300, width: 0.5),
+                                          right: BorderSide(color: Colors.grey.shade300, width: 0.5),
+                                          top: isSameAsAbove ? BorderSide.none : BorderSide(color: Colors.grey.shade400, width: 0.5),
+                                          bottom: isSameAsBelow ? BorderSide.none : BorderSide(color: Colors.grey.shade400, width: 0.5),
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ),
-                            );
-                          }), 
-                        ],
-                      ),
-                    );
-                  },
-                ),
+                                );
+                              }), 
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+      ),
     );
   }
 
-  // --- DIALOG: NEUE BUCHUNG ---
   void _showBookingDialog(RecordModel court, DateTime startTime) {
     int selectedDuration = 60; 
-    int repeatWeeks = 1; // NEU: Variable für das Abo (Standard = 1 = Einzelbuchung)
+    int repeatWeeks = 1;
     List<RecordModel> selectedPlayers = [];
     List<String> guestNames = [];
     final guestController = TextEditingController();
@@ -227,7 +222,7 @@ class _CourtTabState extends State<CourtTab> {
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<int>(
-                        initialValue: selectedDuration,
+                        value: selectedDuration,
                         items: [30, 60, 90, 120].map((m) => DropdownMenuItem(value: m, child: Text("$m Min"))).toList(),
                         onChanged: (v) => setDialogState(() => selectedDuration = v!),
                         decoration: const InputDecoration(labelText: "Dauer"),
@@ -236,9 +231,8 @@ class _CourtTabState extends State<CourtTab> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                // --- NEU: ABO-AUSWAHL ---
                 DropdownButtonFormField<int>(
-                  initialValue: repeatWeeks,
+                  value: repeatWeeks,
                   items: const [
                     DropdownMenuItem(value: 1, child: Text("Einzelbuchung")),
                     DropdownMenuItem(value: 4, child: Text("Abo: 1 Monat (4 Termine)")),
@@ -286,54 +280,116 @@ class _CourtTabState extends State<CourtTab> {
               ],
             ),
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Abbrechen")),
-            ElevatedButton(
-              onPressed: () async {
-                // Lade-Indikator anzeigen, falls ein langes Abo gebucht wird
-                showDialog(
-                  context: context, 
-                  barrierDismissible: false,
-                  builder: (_) => const Center(child: CircularProgressIndicator())
-                );
-
-                try {
-                  // --- NEU: SCHLEIFE FÜR ABO-BUCHUNGEN ---
-                  for (int i = 0; i < repeatWeeks; i++) {
-                    // Startzeit um i Wochen verschieben
-                    final currentStart = startTime.add(Duration(days: i * 7));
-                    final currentEnd = currentStart.add(Duration(minutes: selectedDuration));
-
-                    await pb.collection('bookings').create(body: {
-                      "user": pb.authStore.model!.id,
-                      "court": court.id,
-                      "start_time": currentStart.toUtc().toIso8601String(),
-                      "end_time": currentEnd.toUtc().toIso8601String(),
-                      "players": selectedPlayers.map((p) => p.id).toList(),
-                      "guests": guestNames.join(", "),
-                    });
-                  }
-                } finally {
-                  // Lade-Dialog schließen
-                  Navigator.pop(context);
-                  // Buchungs-Dialog schließen
-                  Navigator.pop(context);
-                  // Grid neu laden
-                  _refreshData();
-                }
-              },
-              child: Text(repeatWeeks > 1 ? "Abo Buchen" : "Buchen"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context), 
+            child: const Text("Abbrechen")
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: appFrontColor.value,
+              foregroundColor: Colors.white,
             ),
-          ],
+            onPressed: () async {
+              // 1. Lade-Indikator anzeigen
+              showDialog(
+                context: context, 
+                barrierDismissible: false,
+                builder: (_) => const Center(child: CircularProgressIndicator())
+              );
+
+              try {
+                // 2. Buchungen durchführen
+                for (int i = 0; i < repeatWeeks; i++) {
+                  final currentStart = startTime.add(Duration(days: i * 7));
+                  final currentEnd = currentStart.add(Duration(minutes: selectedDuration));
+                  
+                  await pb.collection('bookings').create(body: {
+                    "user": pb.authStore.model!.id,
+                    "court": court.id,
+                    "start_time": currentStart.toUtc().toIso8601String(),
+                    "end_time": currentEnd.toUtc().toIso8601String(),
+                    "players": selectedPlayers.map((p) => p.id).toList(),
+                    "guests": guestNames.join(", "),
+                  });
+                }
+
+                // 3. Dialoge schließen und Grid aktualisieren
+                Navigator.pop(context); // Lade-Dialog schließen
+                Navigator.pop(context); // Buchungs-Dialog schließen
+                _refreshData();
+
+                // 4. Schönen Erfolgs-Dialog anzeigen
+                if (mounted) {
+                  _showSuccessDialog(
+                    court.getStringValue('name'), 
+                    startTime, 
+                    repeatWeeks
+                  );
+                }
+
+              } catch (e) {
+                Navigator.pop(context); // Lade-Dialog schließen
+                // Fehler anzeigen
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text("Fehler: ${e.toString()}"),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            child: Text(repeatWeeks > 1 ? "Abo jetzt buchen" : "Jetzt buchen"),
+          ),
+        ],
         ),
       ),
     );
   }
 
+void _showSuccessDialog(String courtName, DateTime date, int weeks) {
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.check_circle_outline, color: Colors.green, size: 80),
+          const SizedBox(height: 16),
+          const Text(
+            "Buchung erfolgreich!",
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            weeks > 1 
+              ? "Dein Abo für $courtName wurde erfolgreich für die nächsten $weeks Wochen angelegt."
+              : "Deine Buchung für $courtName am ${DateFormat('dd.MM.yyyy').format(date)} wurde erfolgreich gespeichert.",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey.shade700),
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              minimumSize: const Size(double.infinity, 45),
+            ),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Super!"),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
   void _pickPlayer(List<RecordModel> users, List<RecordModel> alreadySelected, Function(RecordModel) onPick) {
     String searchQuery = "";
     final currentUserId = pb.authStore.model?.id;
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true, 
@@ -345,7 +401,6 @@ class _CourtTabState extends State<CourtTab> {
             final matchesSearch = u.getStringValue('name').toLowerCase().contains(searchQuery.toLowerCase());
             return !isMe && !isAlreadySelected && matchesSearch;
           }).toList();
-
           return Container(
             height: MediaQuery.of(context).size.height * 0.7,
             padding: const EdgeInsets.all(16),
@@ -357,9 +412,7 @@ class _CourtTabState extends State<CourtTab> {
                     prefixIcon: Icon(Icons.search),
                     border: OutlineInputBorder(),
                   ),
-                  onChanged: (value) {
-                    setSheetState(() => searchQuery = value);
-                  },
+                  onChanged: (value) => setSheetState(() => searchQuery = value),
                 ),
                 const SizedBox(height: 10),
                 Expanded(
@@ -383,24 +436,16 @@ class _CourtTabState extends State<CourtTab> {
     );
   }
 
-  // --- DIALOG: INFO WER GEBUCHT HAT ---
   void _showBookingInfo(RecordModel booking) {
     final currentUserId = pb.authStore.model?.id;
-
     final ownerList = booking.expand['user'];
     final ownerName = (ownerList != null && ownerList.isNotEmpty)
         ? ownerList[0].getStringValue('name')
         : 'Unbekannt';
-
     final List<RecordModel> playerRecords = List<RecordModel>.from(booking.expand['players'] ?? []);
     final String formattedPlayerNames = playerRecords.map((p) => p.getStringValue('name')).join(', ');
-
     final List<dynamic> playerIds = booking.getListValue('players');
-    final bool isOwner = booking.getStringValue('user') == currentUserId;
-    final bool isPlayer = playerIds.contains(currentUserId);
-    
-    final bool canCancel = isOwner || isPlayer;
-
+    final bool canCancel = booking.getStringValue('user') == currentUserId || playerIds.contains(currentUserId);
     final String guestNames = booking.getStringValue('guests');
 
     showDialog(
@@ -411,27 +456,17 @@ class _CourtTabState extends State<CourtTab> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Gebucht von: $ownerName", 
-                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text("Gebucht von: $ownerName", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const Divider(),
-            const SizedBox(height: 5),
-            
             if (formattedPlayerNames.isNotEmpty) ...[
-              const Text("Mitspieler (Mitglieder):", 
-                         style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+              const Text("Mitspieler (Mitglieder):", style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
               Text(formattedPlayerNames),
               const SizedBox(height: 12),
             ],
-            
             if (guestNames.isNotEmpty) ...[
-              const Text("Gäste:", 
-                         style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+              const Text("Gäste:", style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
               Text(guestNames),
             ],
-            
-            if (formattedPlayerNames.isEmpty && guestNames.isEmpty)
-              const Text("Keine weiteren Mitspieler eingetragen.", 
-                         style: TextStyle(fontStyle: FontStyle.italic)),
           ],
         ),
         actions: [
@@ -445,10 +480,7 @@ class _CourtTabState extends State<CourtTab> {
               style: TextButton.styleFrom(foregroundColor: Colors.red),
               child: const Text("Stornieren"),
             ),
-          TextButton(
-            onPressed: () => Navigator.pop(context), 
-            child: const Text("Schließen")
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Schließen")),
         ],
       ),
     );

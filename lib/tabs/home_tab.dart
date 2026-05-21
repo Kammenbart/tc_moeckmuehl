@@ -4,13 +4,14 @@ import 'package:intl/intl.dart';
 import '../main.dart';
 
 class HomeTab extends StatefulWidget {
-  final VoidCallback? onNavigateToCourt; // 1. Variable definieren
+  final Function(DateTime) onNavigateToCourt; 
 
-  const HomeTab({super.key, required this.onNavigateToCourt}); // 2. Im Konstruktor verlangen
+  const HomeTab({super.key, required this.onNavigateToCourt});
 
   @override
   State<HomeTab> createState() => _HomeTabState();
 }
+
 
 class _HomeTabState extends State<HomeTab> {
   List<RecordModel> news = [];
@@ -85,7 +86,9 @@ class _HomeTabState extends State<HomeTab> {
                       title: Text("$court - ${DateFormat('dd.MM.').format(start)}"),
                       subtitle: Text("${DateFormat('HH:mm').format(start)} Uhr"),
                       trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                      onTap: widget.onNavigateToCourt, // Hier wird die Funktion aufgerufen
+                        onTap: () {
+                          widget.onNavigateToCourt(start);
+                        },
                     ),
                   );
                 }),
