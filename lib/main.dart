@@ -48,7 +48,7 @@ Color colorFromHex(String? hex, Color fallback) {
 }
 
 String colorToHex(Color color) {
-  final value = color.value.toRadixString(16).padLeft(8, '0'); // AARRGGBB
+  final value = color.toARGB32().toRadixString(16).padLeft(8, '0'); // AARRGGBB
   return '#${value.substring(2)}'; // wir speichern nur RRGGBB
 }
 

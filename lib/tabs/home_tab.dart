@@ -78,9 +78,9 @@ class _HomeTabState extends State<HomeTab> {
                 const SizedBox(height: 10),
                 ...myBookings.map((b) {
                   final start = DateTime.parse(b.getStringValue('start_time')).toLocal();
-                  final court = b.expand['court']?[0].getStringValue('name') ?? "Platz";
+                  final court = b.expand['court']?[0].getStringValue('surname') ?? "Platz";
                   return Card(
-                    color: appFrontColor.value.withOpacity(0.1),
+                    color: appFrontColor.value.withValues(alpha: 0.1),
                     child: ListTile(
                       leading: const Icon(Icons.calendar_today),
                       title: Text("$court - ${DateFormat('dd.MM.').format(start)}"),

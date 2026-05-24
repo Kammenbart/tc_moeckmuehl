@@ -213,7 +213,7 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
         // Eigene Buchungen
         ListTile(
           leading: CircleAvatar(
-            backgroundColor: _ownColor.withOpacity(0.7),
+            backgroundColor: _ownColor.withValues(alpha: 0.7),
           ),
           title: const Text("Eigene Buchungen"),
           subtitle: const Text("Farbe für selbst oder als Spieler gebuchte Plätze"),
@@ -236,7 +236,7 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
         // Fremde Buchungen
         ListTile(
           leading: CircleAvatar(
-            backgroundColor: _otherColor.withOpacity(0.7),
+            backgroundColor: _otherColor.withValues(alpha: 0.7),
           ),
           title: const Text("Fremde Buchungen"),
           subtitle: const Text("Farbe für von anderen gebuchte Plätze"),

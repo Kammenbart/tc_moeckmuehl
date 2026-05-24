@@ -28,27 +28,45 @@ class _CourtTabState extends State<CourtTab> {
   }
 
   Future<void> _refreshData() async {
-    setState(() => isLoading = true);
-    
-    // 1. Plätze laden und sortieren (damit Platz 1 immer links ist)
-    final fetchedCourts = await pb.collection('courts').getFullList(sort: 'name');
-    allUsers = await pb.collection('users').getFullList(sort: 'name');
-    
-    // 2. Buchungen für den gesamten Tag laden (mit User-Infos)
-    final startOfDay = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day).toUtc().toIso8601String();
-    final endOfDay = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, 23, 59).toUtc().toIso8601String();
-    
+  setState(() => isLoading = true);
+
+  try {
+    // 1. Plätze laden
+    final fetchedCourts =
+        await pb.collection('courts').getFullList(); // vorerst ohne sort
+    // 2. alle User laden
+    allUsers = await pb.collection('users').getFullList(); // vorerst ohne sort
+
+    // 3. Buchungen laden
+    final startOfDay = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day)
+        .toUtc()
+        .toIso8601String();
+    final endOfDay = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, 23, 59)
+        .toUtc()
+        .toIso8601String();
+
     final res = await pb.collection('bookings').getFullList(
       filter: 'start_time >= "$startOfDay" && start_time <= "$endOfDay"',
-      expand: 'user,players,court', 
+      expand: 'user,players,court',
     );
-    
+
     setState(() {
       courts = fetchedCourts;
       bookings = res;
       isLoading = false;
     });
+  } catch (e) {
+    debugPrint("Fehler in _refreshData: $e");
+    if (!mounted) return;
+    setState(() => isLoading = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Fehler beim Laden der Daten: $e"),
+        backgroundColor: Colors.red,
+      ),
+    );
   }
+}
 
   RecordModel? _getBooking(String courtId, DateTime cellTime) {
     for (var b in bookings) {
@@ -125,7 +143,7 @@ class _CourtTabState extends State<CourtTab> {
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             child: Text(
-                              c.getStringValue('name'),
+                              c.getStringValue('surname'),
                               textAlign: TextAlign.center,
                               style: const TextStyle(fontWeight: FontWeight.bold),
                             ),
@@ -162,8 +180,8 @@ class _CourtTabState extends State<CourtTab> {
                                   final isOwner = booking.getStringValue('user') == currentUserId;
                                   final playerIds = booking.getListValue('players');
                                   cellColor = (isOwner || playerIds.contains(currentUserId))
-                                      ? ownBookingColor.value.withOpacity(0.3)
-                                      : otherBookingColor.value.withOpacity(0.3);
+                                      ? ownBookingColor.value.withValues(alpha: 0.3)
+                                      : otherBookingColor.value.withValues(alpha: 0.3);
                                 }
 
                                 final prevTime = cellTime.subtract(const Duration(minutes: 30));
@@ -222,7 +240,7 @@ class _CourtTabState extends State<CourtTab> {
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<int>(
-                        value: selectedDuration,
+                        initialValue: selectedDuration,
                         items: [30, 60, 90, 120].map((m) => DropdownMenuItem(value: m, child: Text("$m Min"))).toList(),
                         onChanged: (v) => setDialogState(() => selectedDuration = v!),
                         decoration: const InputDecoration(labelText: "Dauer"),
@@ -232,7 +250,7 @@ class _CourtTabState extends State<CourtTab> {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<int>(
-                  value: repeatWeeks,
+                  initialValue: repeatWeeks,
                   items: const [
                     DropdownMenuItem(value: 1, child: Text("Einzelbuchung")),
                     DropdownMenuItem(value: 4, child: Text("Abo: 1 Monat (4 Termine)")),
@@ -248,7 +266,7 @@ class _CourtTabState extends State<CourtTab> {
                 Wrap(
                   spacing: 5,
                   children: selectedPlayers.map((p) => Chip(
-                    label: Text(p.getStringValue('name')),
+                    label: Text(p.getStringValue('surname')),
                     onDeleted: () => setDialogState(() => selectedPlayers.remove(p)),
                   )).toList(),
                 ),
@@ -398,7 +416,7 @@ void _showSuccessDialog(String courtName, DateTime date, int weeks) {
           final filteredUsers = users.where((u) {
             final isMe = u.id == currentUserId;
             final isAlreadySelected = alreadySelected.any((s) => s.id == u.id);
-            final matchesSearch = u.getStringValue('name').toLowerCase().contains(searchQuery.toLowerCase());
+            final matchesSearch = u.getStringValue('surname').toLowerCase().contains(searchQuery.toLowerCase());
             return !isMe && !isAlreadySelected && matchesSearch;
           }).toList();
           return Container(
@@ -420,7 +438,7 @@ void _showSuccessDialog(String courtName, DateTime date, int weeks) {
                     itemCount: filteredUsers.length,
                     itemBuilder: (context, i) => ListTile(
                       leading: const Icon(Icons.person),
-                      title: Text(filteredUsers[i].getStringValue('name')),
+                      title: Text(filteredUsers[i].getStringValue('surname')),
                       onTap: () {
                         onPick(filteredUsers[i]);
                         Navigator.pop(context);
@@ -440,10 +458,10 @@ void _showSuccessDialog(String courtName, DateTime date, int weeks) {
     final currentUserId = pb.authStore.model?.id;
     final ownerList = booking.expand['user'];
     final ownerName = (ownerList != null && ownerList.isNotEmpty)
-        ? ownerList[0].getStringValue('name')
+        ? ownerList[0].getStringValue('surname')
         : 'Unbekannt';
     final List<RecordModel> playerRecords = List<RecordModel>.from(booking.expand['players'] ?? []);
-    final String formattedPlayerNames = playerRecords.map((p) => p.getStringValue('name')).join(', ');
+    final String formattedPlayerNames = playerRecords.map((p) => p.getStringValue('surname')).join(', ');
     final List<dynamic> playerIds = booking.getListValue('players');
     final bool canCancel = booking.getStringValue('user') == currentUserId || playerIds.contains(currentUserId);
     final String guestNames = booking.getStringValue('guests');

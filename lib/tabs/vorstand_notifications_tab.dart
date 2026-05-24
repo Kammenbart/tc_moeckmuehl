@@ -96,7 +96,7 @@ class _VorstandNotificationsTabState extends State<VorstandNotificationsTab> {
               trailing: Chip(
                 label: Text(status.isEmpty ? "info" : status),
                 backgroundColor:
-                    _statusColor(status).withOpacity(0.15),
+                    _statusColor(status).withValues(alpha: 0.15),
                 labelStyle: TextStyle(
                   color: _statusColor(status),
                   fontWeight: FontWeight.bold,

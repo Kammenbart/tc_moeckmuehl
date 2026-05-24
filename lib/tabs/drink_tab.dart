@@ -51,7 +51,7 @@ class _DrinkBookingViewState extends State<DrinkBookingView> {
   }
 
   Future<void> _load() async {
-    final res = await pb.collection('beverages').getFullList(sort: 'name');
+    final res = await pb.collection('beverages').getFullList(sort: 'surname');
     setState(() {
       drinks = res;
       counts.clear();
@@ -88,7 +88,7 @@ class _DrinkBookingViewState extends State<DrinkBookingView> {
               final qty = counts[id] ?? 0;
 
               return ListTile(
-                title: Text(d.getStringValue('name')),
+                title: Text(d.getStringValue('surname')),
                 subtitle: Text("${price.toStringAsFixed(2)} €"),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -124,7 +124,7 @@ class _DrinkBookingViewState extends State<DrinkBookingView> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            color: appBackColor.value.withOpacity(0.9),
+            color: appBackColor.value.withValues(alpha: 0.9),
             border: Border(
               top: BorderSide(color: Colors.grey.shade300),
             ),
@@ -301,7 +301,7 @@ class _DrinkHistoryViewState extends State<DrinkHistoryView> {
             itemBuilder: (context, i) {
               final o = orders[i];
               final bev = o.expand['beverage']?[0];
-              final name = bev?.getStringValue('name') ?? "Unbekannt";
+              final surname = bev?.getStringValue('surname') ?? "Unbekannt";
               final price = bev?.getDoubleValue('price') ?? 0;
               final count = o.getIntValue('count');
 
@@ -322,7 +322,7 @@ class _DrinkHistoryViewState extends State<DrinkHistoryView> {
 
               return Card(
                 child: ListTile(
-                  title: Text(name),
+                  title: Text(surname),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -410,7 +410,7 @@ class _DrinkHistoryViewState extends State<DrinkHistoryView> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: appBackColor.value.withOpacity(0.9),
+            color: appBackColor.value.withValues(alpha: 0.9),
             border: Border(
               top: BorderSide(color: Colors.grey.shade300),
             ),

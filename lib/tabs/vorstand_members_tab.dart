@@ -11,8 +11,8 @@ Future<void> showMemberEditDialog(
 }) async {
   final isEdit = member != null;
 
-  final nameController =
-      TextEditingController(text: isEdit ? member.getStringValue('name') : '');
+  final surnameController =
+      TextEditingController(text: isEdit ? member.getStringValue('surname') : '');
   final emailController =
       TextEditingController(text: isEdit ? member.getStringValue('email') : '');
   final passwordController = TextEditingController();
@@ -41,8 +41,8 @@ Future<void> showMemberEditDialog(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
-                controller: nameController,
-                decoration: const InputDecoration(labelText: "Name"),
+                controller: surnameController,
+                decoration: const InputDecoration(labelText: "Nachname"),
               ),
               const SizedBox(height: 8),
               TextField(
@@ -110,14 +110,14 @@ Future<void> showMemberEditDialog(
             onPressed: permission < 2
                 ? null
                 : () async {
-                    final name = nameController.text.trim();
+                    final surname = surnameController.text.trim();
                     final email = emailController.text.trim();
                     final password = passwordController.text.trim();
 
-                    if (name.isEmpty || email.isEmpty) {
+                    if (surname.isEmpty || email.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text("Name und E-Mail dürfen nicht leer sein."),
+                          content: Text("Nachname und E-Mail dürfen nicht leer sein."),
                         ),
                       );
                       return;
@@ -133,7 +133,7 @@ Future<void> showMemberEditDialog(
                     }
 
                     final body = {
-                      "name": name,
+                      "surname": surname,
                       "email": email,
                       "club_id": clubIdController.text.trim(),
                       "phone": phoneController.text.trim(),
@@ -227,8 +227,8 @@ class _VorstandMembersTabState extends State<VorstandMembersTab> {
     setState(() {
       searchQuery = query;
       filteredMembers = members.where((m) {
-        final name = m.getStringValue('name').toLowerCase();
-        return name.contains(query.toLowerCase());
+        final surname = m.getStringValue('surname').toLowerCase();
+        return surname.contains(query.toLowerCase());
       }).toList();
     });
   }
@@ -237,7 +237,7 @@ class _VorstandMembersTabState extends State<VorstandMembersTab> {
     if (widget.permission >= 3) {
       final confirm = await _showConfirmDialog(
         "Mitglied löschen",
-        "Möchtest du ${targetUser.getStringValue('name')} wirklich unwiderruflich löschen?",
+        "Möchtest du ${targetUser.getStringValue('surname')} wirklich unwiderruflich löschen?",
       );
       if (confirm) {
         await pb.collection('users').delete(targetUser.id);
@@ -314,7 +314,7 @@ class _VorstandMembersTabState extends State<VorstandMembersTab> {
                 final m = filteredMembers[index];
                 return ListTile(
                   leading: const CircleAvatar(child: Icon(Icons.person)),
-                  title: Text(m.getStringValue('name')),
+                  title: Text(m.getStringValue('surname')),
                   subtitle: Text(m.getStringValue('email')),
                   onTap: widget.permission >= 2
                       ? () async {
@@ -437,11 +437,11 @@ class _VorstandMembersPermTabState extends State<VorstandMembersPermTab> {
 
   @override
   Widget build(BuildContext context) {
-    final name = widget.member.getStringValue('name');
+    final surname = widget.member.getStringValue('surname');
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Rechte: $name'),
+        title: Text('Rechte: $surname'),
         actions: [
           IconButton(
             icon: const Icon(Icons.save),
@@ -570,7 +570,7 @@ class VorstandMembersCreateTab extends StatefulWidget {
 class _VorstandMembersCreateTabState extends State<VorstandMembersCreateTab> {
   final _formKey = GlobalKey<FormState>();
 
-  final nameController = TextEditingController();
+  final surnameController = TextEditingController();
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   final clubIdController = TextEditingController();
@@ -589,7 +589,7 @@ class _VorstandMembersCreateTabState extends State<VorstandMembersCreateTab> {
     setState(() => _saving = true);
 
     final body = {
-      "name": nameController.text.trim(),
+      "surname": surnameController.text.trim(),
       "email": emailController.text.trim(),
       "password": passwordController.text.trim(),
       "passwordConfirm": passwordController.text.trim(),
@@ -639,10 +639,10 @@ class _VorstandMembersCreateTabState extends State<VorstandMembersCreateTab> {
           child: Column(
             children: [
               TextFormField(
-                controller: nameController,
-                decoration: const InputDecoration(labelText: "Name"),
+                controller: surnameController,
+                decoration: const InputDecoration(labelText: "Nachname"),
                 validator: (v) =>
-                    v == null || v.trim().isEmpty ? "Name erforderlich" : null,
+                    v == null || v.trim().isEmpty ? "Nachname erforderlich" : null,
               ),
               const SizedBox(height: 8),
               TextFormField(
@@ -718,7 +718,7 @@ class VorstandMembersEditTab extends StatefulWidget {
 class _VorstandMembersEditTabState extends State<VorstandMembersEditTab> {
   final _formKey = GlobalKey<FormState>();
 
-  late TextEditingController nameController;
+  late TextEditingController surnameController;
   late TextEditingController emailController;
   final passwordController = TextEditingController();
   late TextEditingController clubIdController;
@@ -735,8 +735,8 @@ class _VorstandMembersEditTabState extends State<VorstandMembersEditTab> {
   void initState() {
     super.initState();
     final m = widget.member;
-    nameController =
-        TextEditingController(text: m.getStringValue('name'));
+    surnameController =
+        TextEditingController(text: m.getStringValue('surname'));
     emailController =
         TextEditingController(text: m.getStringValue('email'));
     clubIdController =
@@ -761,7 +761,7 @@ class _VorstandMembersEditTabState extends State<VorstandMembersEditTab> {
     setState(() => _saving = true);
 
     final body = {
-      "name": nameController.text.trim(),
+      "surname": surnameController.text.trim(),
       "email": emailController.text.trim(),
       "club_id": clubIdController.text.trim(),
       "phone": phoneController.text.trim(),
@@ -798,11 +798,11 @@ class _VorstandMembersEditTabState extends State<VorstandMembersEditTab> {
 
   @override
   Widget build(BuildContext context) {
-    final name = widget.member.getStringValue('name');
+    final surname = widget.member.getStringValue('surname');
 
     return Scaffold(
       appBar: AppBar(
-        title: Text("Mitglied bearbeiten: $name"),
+        title: Text("Mitglied bearbeiten: $surname"),
         actions: [
           IconButton(
             icon: const Icon(Icons.save),
@@ -817,10 +817,10 @@ class _VorstandMembersEditTabState extends State<VorstandMembersEditTab> {
           child: Column(
             children: [
               TextFormField(
-                controller: nameController,
-                decoration: const InputDecoration(labelText: "Name"),
+                controller: surnameController,
+                decoration: const InputDecoration(labelText: "Nachname"),
                 validator: (v) =>
-                    v == null || v.trim().isEmpty ? "Name erforderlich" : null,
+                    v == null || v.trim().isEmpty ? "Nachname erforderlich" : null,
               ),
               const SizedBox(height: 8),
               TextFormField(
