@@ -128,7 +128,7 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
-  final nameController = TextEditingController(); // Neu für Registrierung
+  final surnameController = TextEditingController(); // Neu für Registrierung
   bool isLoading = false;
   bool isLoginMode = true; // Schalter zwischen Login und Registrierung
 
@@ -154,7 +154,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
               // Name Feld (nur bei Registrierung sichtbar)
               if (!isLoginMode) ...[
                 TextField(
-                  controller: nameController,
+                  controller: surnameController,
                   decoration: const InputDecoration(
                     labelText: "Vollständiger Name",
                     border: OutlineInputBorder(),
@@ -243,7 +243,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   Future<void> _register() async {
-    if (nameController.text.isEmpty || emailController.text.isEmpty || passwordController.text.length < 8) {
+    if (surnameController.text.isEmpty || emailController.text.isEmpty || passwordController.text.length < 8) {
       _showError("Bitte alle Felder füllen (Passwort min. 8 Zeichen).");
       return;
     }
@@ -253,7 +253,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         "email": emailController.text.trim(),
         "password": passwordController.text,
         "passwordConfirm": passwordController.text,
-        "name": nameController.text.trim(),
+        "name": surnameController.text.trim(),
       });
       // Nach Registrierung direkt einloggen
       await _login();
