@@ -143,7 +143,7 @@ class _CourtTabState extends State<CourtTab> {
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             child: Text(
-                              c.getStringValue('surname'),
+                              c.getStringValue('name'),
                               textAlign: TextAlign.center,
                               style: const TextStyle(fontWeight: FontWeight.bold),
                             ),

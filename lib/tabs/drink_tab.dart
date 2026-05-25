@@ -14,7 +14,19 @@ class DrinkTab extends StatelessWidget {
       child: Scaffold(
         appBar: AppBar(
           title: const Text("Getränkekasse"),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.add),
+              tooltip: "Eigenen Artikel buchen",
+              onPressed: () async {
+                await _showCustomDrinkDialog(context);
+              },
+            ),
+          ],
           bottom: const TabBar(
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            indicatorColor: Colors.white,
             tabs: [
               Tab(text: "Buchen"),
               Tab(text: "Verlauf"),
@@ -30,8 +42,128 @@ class DrinkTab extends StatelessWidget {
       ),
     );
   }
-}
+  Future<void> _showCustomDrinkDialog(BuildContext context) async {
+    final nameController = TextEditingController();
+    final priceController = TextEditingController();
+    int count = 1;
 
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            return AlertDialog(
+              title: const Text("Eigenen Artikel buchen"),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        labelText: "Artikelname",
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: priceController,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: "Preis (€)",
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Text("Anzahl:"),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.remove),
+                          onPressed: () {
+                            setState(() {
+                              count = (count - 1).clamp(1, 99);
+                            });
+                          },
+                        ),
+                        Text("$count"),
+                        IconButton(
+                          icon: const Icon(Icons.add),
+                          onPressed: () {
+                            setState(() {
+                              count = count + 1;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text("Abbrechen"),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final name = nameController.text.trim();
+                    final priceStr = priceController.text.trim();
+                    final price = double.tryParse(
+                          priceStr.replaceAll(',', '.'),
+                        ) ??
+                        0;
+
+                    if (name.isEmpty || price <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                              "Bitte Artikelname und gültigen Preis eingeben."),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+
+                    try {
+                      await pb.collection('beverage_orders').create(body: {
+                        "user": pb.authStore.model.id,
+                        "count": count,
+                        "cancel_requested": false,
+                        "custom_name": name,
+                        "custom_price": price,
+                      });
+
+                      if (context.mounted) {
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Eigener Artikel gebucht."),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text("Fehler: $e"),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  child: const Text("Buchen"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+}
 // --- Unter-Seite 1: Buchen ---
 class DrinkBookingView extends StatefulWidget {
   const DrinkBookingView({super.key});
@@ -51,7 +183,7 @@ class _DrinkBookingViewState extends State<DrinkBookingView> {
   }
 
   Future<void> _load() async {
-    final res = await pb.collection('beverages').getFullList(sort: 'surname');
+    final res = await pb.collection('beverages').getFullList(sort: 'name');
     setState(() {
       drinks = res;
       counts.clear();
@@ -72,7 +204,7 @@ class _DrinkBookingViewState extends State<DrinkBookingView> {
     return sum;
   }
 
-  @override
+    @override
   Widget build(BuildContext context) {
     final total = _currentTotal();
 
@@ -88,7 +220,7 @@ class _DrinkBookingViewState extends State<DrinkBookingView> {
               final qty = counts[id] ?? 0;
 
               return ListTile(
-                title: Text(d.getStringValue('surname')),
+                title: Text(d.getStringValue('name')),
                 subtitle: Text("${price.toStringAsFixed(2)} €"),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -205,6 +337,7 @@ class _DrinkBookingViewState extends State<DrinkBookingView> {
     );
   }
 
+
   Future<double> _loadMyTotal() async {
     final userId = pb.authStore.model.id;
     final orders = await pb.collection('beverage_orders').getFullList(
@@ -301,10 +434,15 @@ class _DrinkHistoryViewState extends State<DrinkHistoryView> {
             itemBuilder: (context, i) {
               final o = orders[i];
               final bev = o.expand['beverage']?[0];
-              final surname = bev?.getStringValue('surname') ?? "Unbekannt";
-              final price = bev?.getDoubleValue('price') ?? 0;
+              final customName = o.getStringValue('custom_name');
+              final hasCustom = bev == null && customName.isNotEmpty;
+              final name = hasCustom
+                  ? customName
+                  : (bev?.getStringValue('name') ?? "Unbekannt");
+              final price = hasCustom
+                  ? o.getDoubleValue('custom_price')
+                  : (bev?.getDoubleValue('price') ?? 0);
               final count = o.getIntValue('count');
-
               final created =
                   DateTime.parse(o.getStringValue('created')).toLocal();
               final createdStr = DateFormat(
@@ -322,7 +460,7 @@ class _DrinkHistoryViewState extends State<DrinkHistoryView> {
 
               return Card(
                 child: ListTile(
-                  title: Text(surname),
+                  title: Text(name),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -349,9 +487,29 @@ class _DrinkHistoryViewState extends State<DrinkHistoryView> {
                         TextButton(
                           onPressed: () async {
                             try {
+                              // Infos für Notification sammeln
+                              final bev = o.expand['beverage']?[0];
+                              final articleName = bev?.getStringValue('name') ?? "Unbekanntes Getränk";
+
+                              final userRec = pb.authStore.model as RecordModel;
+                              final personName = [
+                                userRec.getStringValue('forename'),
+                                userRec.getStringValue('surname'),
+                              ].where((e) => e.isNotEmpty).join(' ');
+                              final dateStr = DateFormat('dd.MM.yyyy', 'de_DE').format(DateTime.now());
+
                               await pb
                                   .collection('beverage_orders')
                                   .delete(o.id);
+
+                              // Notification für direkte Stornierung
+                              await pb.collection('notifications').create(body: {
+                                "message":
+                                    "Artikel $articleName wurde von $personName am $dateStr storniert.",
+                                "category": "info",
+                                "priority": "normal",
+                              });
+
                               setState(() {
                                 orders.removeAt(i);
                               });
@@ -359,8 +517,7 @@ class _DrinkHistoryViewState extends State<DrinkHistoryView> {
                               if (!mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content:
-                                      Text('Storno fehlgeschlagen: $e'),
+                                  content: Text('Storno fehlgeschlagen: $e'),
                                   backgroundColor: Colors.red,
                                 ),
                               );
@@ -375,21 +532,33 @@ class _DrinkHistoryViewState extends State<DrinkHistoryView> {
                       TextButton(
                         onPressed: () async {
                           try {
-                            await pb
-                                .collection('beverage_orders')
-                                .update(
+                            final bev = o.expand['beverage']?[0];
+                            final articleName = bev?.getStringValue('name') ?? "Unbekanntes Getränk";
+                            final userRec = pb.authStore.model as RecordModel;
+                            final personName = [
+                              userRec.getStringValue('forename'),
+                              userRec.getStringValue('surname'),
+                            ].where((e) => e.isNotEmpty).join(' ');
+                            final dateStr = DateFormat('dd.MM.yyyy', 'de_DE').format(DateTime.now());
+                            await pb.collection('beverage_orders').update(
                               o.id,
                               body: {
                                 "cancel_requested": true,
                               },
                             );
+                            // Notification für Storno-Anfrage
+                            await pb.collection('notifications').create(body: {
+                              "message":
+                                  "Für Artikel $articleName wurde von $personName am $dateStr eine Stornierung angefragt.",
+                              "category": "action_required",
+                              "priority": "normal",
+                            });
                             await _load(); // Liste neu laden
                           } catch (e) {
                             if (!mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(
-                                    'Storno-Anfrage fehlgeschlagen: $e'),
+                                content: Text('Storno-Anfrage fehlgeschlagen: $e'),
                                 backgroundColor: Colors.red,
                               ),
                             );
