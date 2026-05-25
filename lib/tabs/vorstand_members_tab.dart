@@ -10,26 +10,27 @@ Future<void> showMemberEditDialog(
   required int permission,
 }) async {
   final isEdit = member != null;
-
-  final surnameController =
-      TextEditingController(text: isEdit ? member.getStringValue('surname') : '');
-  final emailController =
-      TextEditingController(text: isEdit ? member.getStringValue('email') : '');
-  final passwordController = TextEditingController();
-  final clubIdController = TextEditingController(
-      text: isEdit ? member.getStringValue('club_id') : '');
-  final ibanController = TextEditingController(
-      text: isEdit ? member.getStringValue('iban') : '');
-  final bicController = TextEditingController(
-      text: isEdit ? member.getStringValue('bic') : '');
-  final bankNameController = TextEditingController(
-      text: isEdit ? member.getStringValue('bank_name') : '');
-  final bankOwnerController = TextEditingController(
-      text: isEdit ? member.getStringValue('bank_owner') : '');
-  final phoneController = TextEditingController(
-      text: isEdit ? member.getStringValue('phone') : '');
-  final mobileController = TextEditingController(
-      text: isEdit ? member.getStringValue('mobile') : '');
+final forenameController =
+    TextEditingController(text: isEdit ? member.getStringValue('forename') : '');
+final surnameController =
+    TextEditingController(text: isEdit ? member.getStringValue('surname') : '');
+final emailController =
+    TextEditingController(text: isEdit ? member.getStringValue('email') : '');
+final clubIdController = TextEditingController(
+    text: isEdit ? member.getStringValue('club_id') : '');
+final ibanController = TextEditingController(
+    text: isEdit ? member.getStringValue('iban') : '');
+final bicController = TextEditingController(
+    text: isEdit ? member.getStringValue('bic') : '');
+final bankNameController = TextEditingController(
+    text: isEdit ? member.getStringValue('bank_name') : '');
+final bankOwnerController = TextEditingController(
+    text: isEdit ? member.getStringValue('bank_owner') : '');
+final phoneController = TextEditingController(
+    text: isEdit ? member.getStringValue('phone') : '');
+final mobileController = TextEditingController(
+    text: isEdit ? member.getStringValue('mobile') : '');
+final passwordController = TextEditingController();
 
   await showDialog(
     context: context,
@@ -40,6 +41,11 @@ Future<void> showMemberEditDialog(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              TextField(
+                controller: forenameController,
+                decoration: const InputDecoration(labelText: "Vorname"),
+              ),
+              const SizedBox(height: 8),
               TextField(
                 controller: surnameController,
                 decoration: const InputDecoration(labelText: "Nachname"),
@@ -110,14 +116,15 @@ Future<void> showMemberEditDialog(
             onPressed: permission < 2
                 ? null
                 : () async {
+                    final forename = forenameController.text.trim();
                     final surname = surnameController.text.trim();
                     final email = emailController.text.trim();
                     final password = passwordController.text.trim();
 
-                    if (surname.isEmpty || email.isEmpty) {
+                    if (surname.isEmpty || email.isEmpty || forename.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text("Nachname und E-Mail dürfen nicht leer sein."),
+                          content: Text("Vorname, Nachname und E-Mail dürfen nicht leer sein."),
                         ),
                       );
                       return;
@@ -210,19 +217,26 @@ class _VorstandMembersTabState extends State<VorstandMembersTab> {
     super.initState();
     _loadData();
   }
-
   Future<void> _loadData() async {
-    setState(() => isLoading = true);
-    try {
-      members = await pb.collection('users').getFullList(sort: 'name');
-      filteredMembers = members;
-    } catch (e) {
-      debugPrint("Fehler beim Laden: $e");
-    } finally {
-      if (mounted) setState(() => isLoading = false);
+  setState(() => isLoading = true);
+  try {
+    members = await pb.collection('users').getFullList(sort: 'surname');
+    debugPrint("Mitglieder geladen: ${members.length}");
+    filteredMembers = members;
+  } catch (e) {
+    debugPrint("Fehler beim Laden: $e");
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Fehler beim Laden der Mitglieder: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
+  } finally {
+    if (mounted) setState(() => isLoading = false);
   }
-
+}
   void _filterMembers(String query) {
     setState(() {
       searchQuery = query;
@@ -570,6 +584,7 @@ class VorstandMembersCreateTab extends StatefulWidget {
 class _VorstandMembersCreateTabState extends State<VorstandMembersCreateTab> {
   final _formKey = GlobalKey<FormState>();
 
+  final forenameController = TextEditingController();
   final surnameController = TextEditingController();
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
@@ -589,6 +604,7 @@ class _VorstandMembersCreateTabState extends State<VorstandMembersCreateTab> {
     setState(() => _saving = true);
 
     final body = {
+      "forename": forenameController.text.trim(),
       "surname": surnameController.text.trim(),
       "email": emailController.text.trim(),
       "password": passwordController.text.trim(),
@@ -638,6 +654,13 @@ class _VorstandMembersCreateTabState extends State<VorstandMembersCreateTab> {
           key: _formKey,
           child: Column(
             children: [
+              TextFormField(
+                controller: forenameController,
+                decoration: const InputDecoration(labelText: "Vorname"),
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? "Vorname erforderlich" : null,
+              ),
+              const SizedBox(height: 8),
               TextFormField(
                 controller: surnameController,
                 decoration: const InputDecoration(labelText: "Nachname"),
@@ -717,7 +740,7 @@ class VorstandMembersEditTab extends StatefulWidget {
 
 class _VorstandMembersEditTabState extends State<VorstandMembersEditTab> {
   final _formKey = GlobalKey<FormState>();
-
+  late TextEditingController forenameController;
   late TextEditingController surnameController;
   late TextEditingController emailController;
   final passwordController = TextEditingController();
@@ -735,6 +758,8 @@ class _VorstandMembersEditTabState extends State<VorstandMembersEditTab> {
   void initState() {
     super.initState();
     final m = widget.member;
+    forenameController =
+        TextEditingController(text: m.getStringValue('forename'));
     surnameController =
         TextEditingController(text: m.getStringValue('surname'));
     emailController =
@@ -761,6 +786,7 @@ class _VorstandMembersEditTabState extends State<VorstandMembersEditTab> {
     setState(() => _saving = true);
 
     final body = {
+      "forename": forenameController.text.trim(),
       "surname": surnameController.text.trim(),
       "email": emailController.text.trim(),
       "club_id": clubIdController.text.trim(),
@@ -816,6 +842,13 @@ class _VorstandMembersEditTabState extends State<VorstandMembersEditTab> {
           key: _formKey,
           child: Column(
             children: [
+              TextFormField(
+                controller: forenameController,
+                decoration: const InputDecoration(labelText: "Vorname"),
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? "Vorname erforderlich" : null,
+              ),
+              const SizedBox(height: 8),
               TextFormField(
                 controller: surnameController,
                 decoration: const InputDecoration(labelText: "Nachname"),
