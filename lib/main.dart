@@ -128,9 +128,20 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
-  final surnameController = TextEditingController(); // Neu für Registrierung
+  final forenameController = TextEditingController();
+  final surnameController = TextEditingController();
+
   bool isLoading = false;
-  bool isLoginMode = true; // Schalter zwischen Login und Registrierung
+  bool isLoginMode = true;
+
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    forenameController.dispose();
+    surnameController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -140,92 +151,132 @@ class _AuthWrapperState extends State<AuthWrapper> {
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.sports_tennis, size: 80, color: Colors.green),
-              const SizedBox(height: 10),
-              Text(
-                isLoginMode ? "TC Möckmühl Login" : "Konto erstellen",
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 30),
-              
-              // Name Feld (nur bei Registrierung sichtbar)
-              if (!isLoginMode) ...[
-                TextField(
-                  controller: surnameController,
-                  decoration: const InputDecoration(
-                    labelText: "Vollständiger Name",
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person),
+          child: AutofillGroup(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.sports_tennis, size: 80, color: Colors.green),
+                const SizedBox(height: 10),
+                Text(
+                  isLoginMode ? "TC Möckmühl Login" : "Konto erstellen",
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
                   ),
+                ),
+                const SizedBox(height: 30),
+
+                // Vor-/Nachname nur bei Registrierung
+                if (!isLoginMode) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: forenameController,
+                          decoration: const InputDecoration(
+                            labelText: "Vorname",
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.person),
+                          ),
+                          autofillHints: const [AutofillHints.givenName],
+                          textInputAction: TextInputAction.next,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: surnameController,
+                          decoration: const InputDecoration(
+                            labelText: "Nachname",
+                            border: OutlineInputBorder(),
+                          ),
+                          autofillHints: const [AutofillHints.familyName],
+                          textInputAction: TextInputAction.next,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                ],
+
+                TextField(
+                  controller: emailController,
+                  decoration: const InputDecoration(
+                    labelText: "E-Mail",
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.email),
+                  ),
+                  keyboardType: TextInputType.emailAddress,
+                  autofillHints: const [
+                    AutofillHints.username,
+                    AutofillHints.email,
+                  ],
+                  textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: 15),
-              ],
-
-              TextField(
-                controller: emailController,
-                decoration: const InputDecoration(
-                  labelText: "E-Mail",
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.email),
-                ),
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 15),
-              TextField(
-                controller: passwordController,
-                decoration: const InputDecoration(
-                  labelText: "Passwort",
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.lock),
-                ),
-                obscureText: true,
-              ),
-              
-              // Passwort vergessen (nur im Login-Modus)
-              if (isLoginMode)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: _resetPassword,
-                    child: const Text("Passwort vergessen?"),
+                TextField(
+                  controller: passwordController,
+                  decoration: InputDecoration(
+                    labelText: isLoginMode ? "Passwort" : "Neues Passwort",
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.lock),
                   ),
+                  obscureText: true,
+                  autofillHints: isLoginMode
+                      ? const [AutofillHints.password]
+                      : const [AutofillHints.newPassword],
+                  textInputAction: TextInputAction.done,
+                  onEditingComplete: () =>
+                      isLoginMode ? _login() : _register(),
                 ),
 
-              const SizedBox(height: 20),
-              if (isLoading)
-                const CircularProgressIndicator()
-              else
-                Column(
-                  children: [
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 50),
-                        backgroundColor: appFrontColor.value,
-                        foregroundColor: Colors.white,
+                // Passwort vergessen (nur Login)
+                if (isLoginMode)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _resetPassword,
+                      child: const Text("Passwort vergessen?"),
+                    ),
+                  ),
+
+                const SizedBox(height: 20),
+                if (isLoading)
+                  const CircularProgressIndicator()
+                else
+                  Column(
+                    children: [
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 50),
+                          backgroundColor: appFrontColor.value,
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: isLoginMode ? _login : _register,
+                        child:
+                            Text(isLoginMode ? "Einloggen" : "Registrieren"),
                       ),
-                      onPressed: isLoginMode ? _login : _register,
-                      child: Text(isLoginMode ? "Einloggen" : "Registrieren"),
-                    ),
-                    const SizedBox(height: 15),
-                    TextButton(
-                      onPressed: () => setState(() => isLoginMode = !isLoginMode),
-                      child: Text(isLoginMode 
-                        ? "Noch kein Konto? Hier registrieren" 
-                        : "Bereits ein Konto? Zum Login"),
-                    ),
-                  ],
-                ),
-            ],
+                      const SizedBox(height: 15),
+                      TextButton(
+                        onPressed: () =>
+                            setState(() => isLoginMode = !isLoginMode),
+                        child: Text(
+                          isLoginMode
+                              ? "Noch kein Konto? Hier registrieren"
+                              : "Bereits ein Konto? Zum Login",
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  // --- LOGIK FUNKTIONEN ---
+  // --- LOGIK-FUNKTIONEN ---
 
   Future<void> _login() async {
     setState(() => isLoading = true);
@@ -243,19 +294,28 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   Future<void> _register() async {
-    if (surnameController.text.isEmpty || emailController.text.isEmpty || passwordController.text.length < 8) {
-      _showError("Bitte alle Felder füllen (Passwort min. 8 Zeichen).");
+    if (forenameController.text.isEmpty ||
+        surnameController.text.isEmpty ||
+        emailController.text.isEmpty ||
+        passwordController.text.length < 8) {
+      _showError(
+        "Bitte alle Felder füllen (Vorname, Nachname, E-Mail, Passwort min. 8 Zeichen).",
+      );
       return;
     }
+
     setState(() => isLoading = true);
     try {
       await pb.collection('users').create(body: {
         "email": emailController.text.trim(),
         "password": passwordController.text,
         "passwordConfirm": passwordController.text,
-        "name": surnameController.text.trim(),
+        "forename": forenameController.text.trim(),
+        "surname": surnameController.text.trim(),
+        // optional: kombiniertes name-Feld, falls du es noch irgendwo brauchst
+        "name": "${forenameController.text.trim()} ${surnameController.text.trim()}",
       });
-      // Nach Registrierung direkt einloggen
+
       await _login();
     } catch (e) {
       _showError("Registrierung fehlgeschlagen: $e");
@@ -270,7 +330,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
       return;
     }
     try {
-      await pb.collection('users').requestPasswordReset(emailController.text.trim());
+      await pb
+          .collection('users')
+          .requestPasswordReset(emailController.text.trim());
       _showSuccess("E-Mail zum Zurücksetzen wurde gesendet!");
     } catch (e) {
       _showError("Fehler: $e");
@@ -278,11 +340,15 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   void _showError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: Colors.red),
+    );
   }
 
   void _showSuccess(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: Colors.green),
+    );
   }
 }
 
