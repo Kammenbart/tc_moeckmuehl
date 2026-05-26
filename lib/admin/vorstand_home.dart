@@ -31,13 +31,16 @@ class _VorstandHomeScreenState extends State<VorstandHomeScreen> {
   Future<void> _loadPermissions() async {
     try {
       final user = pb.authStore.model as RecordModel;
-      setState(() {
-        // Lädt die Rechte aus deiner PocketBase Users-Collection
-        memberPerm = user.getIntValue('perm_vorstand_member');
-        kassePerm = user.getIntValue('perm_vorstand_kasse');
-        bookingPerm = user.getIntValue('perm_vorstand_booking');
-        _loadedPerms = true;
-      });
+        setState(() {
+          final isAppAdmin = user.getBoolValue('auth_admin_app');
+
+          // App-Admin bekommt automatisch Vollzugriff (3 = lesen+schreiben+löschen)
+          memberPerm  = isAppAdmin ? 3 : user.getIntValue('perm_board_member');
+          kassePerm   = isAppAdmin ? 3 : user.getIntValue('perm_board_cash');
+          bookingPerm = isAppAdmin ? 3 : user.getIntValue('perm_board_booking');
+
+          _loadedPerms = true;
+        });
     } catch (e) {
       debugPrint("Fehler beim Laden der Rechte: $e");
       setState(() => _loadedPerms = true);
@@ -62,12 +65,15 @@ class _VorstandHomeScreenState extends State<VorstandHomeScreen> {
     ];
 
     // Steuerung der klickbaren Bereiche
+    final user = pb.authStore.model as RecordModel;
+    final isAppAdmin = user.getBoolValue('auth_admin_app');
+
     final List<bool> enabled = [
-      true,              // Dashboard immer an
-      memberPerm > 0,    // Mitglieder nur bei Recht
-      kassePerm > 0,     // Kasse nur bei Recht
-      bookingPerm > 0,   // Buchungen nur bei Recht
-      true,              // Mitteilungen immer an
+      true,                        // Dashboard immer an
+      isAppAdmin || memberPerm > 0,   // Mitglieder nur bei Recht oder App-Admin
+      isAppAdmin || kassePerm > 0,    // Kasse nur bei Recht oder App-Admin
+      isAppAdmin || bookingPerm > 0,  // Buchungen nur bei Recht oder App-Admin
+      true,                        // Mitteilungen immer an
     ];
 
     return Scaffold(

@@ -508,6 +508,7 @@ class _DrinkHistoryViewState extends State<DrinkHistoryView> {
                                     "Artikel $articleName wurde von $personName am $dateStr storniert.",
                                 "category": "info",
                                 "priority": "normal",
+                                "scope": "vorstand_beverages",
                               });
 
                               setState(() {
@@ -552,6 +553,7 @@ class _DrinkHistoryViewState extends State<DrinkHistoryView> {
                                   "Für Artikel $articleName wurde von $personName am $dateStr eine Stornierung angefragt.",
                               "category": "action_required",
                               "priority": "normal",
+                              "scope": "vorstand_beverages",
                             });
                             await _load(); // Liste neu laden
                           } catch (e) {

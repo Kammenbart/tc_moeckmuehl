@@ -311,13 +311,44 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final record = user as RecordModel;
 
-    final isVorstand = record.getBoolValue('auth_vorstand');
-    final isTrainer = record.getBoolValue('auth_trainer');
-    final isAdmin   = record.getBoolValue('auth_admin');
+    // Admin-Rollen
+    final isAppAdmin     = record.getBoolValue('auth_admin_app');
+    final isBoardAdmin   = record.getBoolValue('auth_admin_board');
+    final isTrainerAdmin = record.getBoolValue('auth_admin_trainer');
+
+    // Vorstands-Rechte
+    final permBoardMember   = record.getIntValue('perm_board_member');
+    final permBoardCash     = record.getIntValue('perm_board_cash');
+    final permBoardBooking  = record.getIntValue('perm_board_booking');
+    final permBoardBeverage = record.getIntValue('perm_board_beverage');
+
+    // Trainer-Rechte
+    final permTrainerTrainer  = record.getIntValue('perm_trainer_trainer');
+    final permTrainerMember   = record.getIntValue('perm_trainer_member');
+    final permTrainerBill     = record.getIntValue('perm_trainer_bill');
+    final permTrainerReminder = record.getIntValue('perm_trainer_reminder');
+
+    // Hat irgendein Vorstandsrecht oder ist Board-Admin/App-Admin?
+    final hasBoardRight = isAppAdmin ||
+        isBoardAdmin ||
+        permBoardMember   > 0 ||
+        permBoardCash     > 0 ||
+        permBoardBooking  > 0 ||
+        permBoardBeverage > 0;
+
+    // Hat irgendein Trainerrecht oder ist Trainer-Admin/App-Admin?
+    final hasTrainerRight = isAppAdmin ||
+        isTrainerAdmin ||
+        permTrainerTrainer  > 0 ||
+        permTrainerMember   > 0 ||
+        permTrainerBill     > 0 ||
+        permTrainerReminder > 0;
 
     // Rechte in eine Liste packen
     final List<_RoleEntry> roles = [];
-    if (isVorstand) {
+
+    // Vorstand-Button anzeigen, wenn irgendein Board-Recht
+    if (hasBoardRight) {
       roles.add(_RoleEntry(
         label: 'Vorstand',
         icon: Icons.account_balance,
@@ -330,7 +361,9 @@ class _HomeScreenState extends State<HomeScreen> {
         },
       ));
     }
-    if (isTrainer) {
+
+    // Trainer-Button anzeigen, wenn irgendein Trainer-Recht
+    if (hasTrainerRight) {
       roles.add(_RoleEntry(
         label: 'Trainer',
         icon: Icons.fitness_center,
@@ -343,7 +376,9 @@ class _HomeScreenState extends State<HomeScreen> {
         },
       ));
     }
-    if (isAdmin) {
+
+    // Admin-Button nur für App-Admin
+    if (isAppAdmin) {
       roles.add(_RoleEntry(
         label: 'Admin',
         icon: Icons.settings,

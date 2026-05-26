@@ -300,12 +300,32 @@ class _VorstandMembersTabState extends State<VorstandMembersTab> {
 
   @override
   Widget build(BuildContext context) {
+    // 1. Rechte für diesen Tab OBEN definieren, vor isLoading
+    final record    = pb.authStore.record as RecordModel;
+    final isAppAdmin = record.getBoolValue('auth_admin_app');
+    final perm       = widget.permission;
+
+    final canRead   = perm >= 1 || isAppAdmin;
+    final canWrite  = perm >= 2 || isAppAdmin;
+    final canDelete = perm >= 3 || isAppAdmin;
+
+    // 2. Optional: wenn jemand gar kein Leserecht hat, direkt blocken
+    if (!canRead) {
+      return const Scaffold(
+        body: Center(
+          child: Text("Keine Berechtigung, Mitglieder zu sehen."),
+        ),
+      );
+    }
+
+    // 3. Loading-Zustand
     if (isLoading) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
+    // 4. Normale Ansicht
     return Scaffold(
       body: Column(
         children: [
@@ -330,7 +350,7 @@ class _VorstandMembersTabState extends State<VorstandMembersTab> {
                   leading: const CircleAvatar(child: Icon(Icons.person)),
                   title: Text(m.getStringValue('surname')),
                   subtitle: Text(m.getStringValue('email')),
-                  onTap: widget.permission >= 2
+                  onTap: canWrite
                       ? () async {
                           await Navigator.of(context).push(
                             MaterialPageRoute(
@@ -343,7 +363,7 @@ class _VorstandMembersTabState extends State<VorstandMembersTab> {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (widget.permission >= 4)
+                      if (perm >= 4 || isAppAdmin)
                         IconButton(
                           icon: const Icon(Icons.security, color: Colors.blue),
                           onPressed: () async {
@@ -357,7 +377,7 @@ class _VorstandMembersTabState extends State<VorstandMembersTab> {
                             _loadData();
                           },
                         ),
-                      if (widget.permission >= 2)
+                      if (canDelete)
                         IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),
                           onPressed: () => _handleDelete(m),
@@ -370,7 +390,7 @@ class _VorstandMembersTabState extends State<VorstandMembersTab> {
           ),
         ],
       ),
-      floatingActionButton: widget.permission >= 2
+      floatingActionButton: canWrite
           ? FloatingActionButton(
               onPressed: () async {
                 await Navigator.of(context).push(
