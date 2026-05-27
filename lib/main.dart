@@ -276,54 +276,103 @@ class _AuthWrapperState extends State<AuthWrapper> {
     );
   }
 
-  // --- LOGIK-FUNKTIONEN ---
-
   Future<void> _login() async {
-    setState(() => isLoading = true);
-    try {
-      await pb.collection('users').authWithPassword(
-        emailController.text.trim(),
-        passwordController.text,
-      );
-      setState(() {}); // Wechsel zum HomeScreen
-    } catch (e) {
-      _showError("Login fehlgeschlagen. Daten prüfen.");
-    } finally {
+  setState(() => isLoading = true);
+  try {
+    await pb.collection('users').authWithPassword(
+      emailController.text.trim(),
+      passwordController.text,
+    );
+
+    // Login ok → HomeScreen
+    setState(() {}); 
+  } catch (e) {
+    debugPrint("Login-Fehler: $e");
+
+    if (e is ClientException) {
+      final msg = (e.response['message'] ?? '').toString().toLowerCase();
+
+      // Spezielle Meldung für "E-Mail noch nicht verifiziert"
+      if (msg.contains('verify') && msg.contains('email')) {
+        _showError(
+          "E-Mail-Adresse noch nicht bestätigt.\n"
+          "Bitte E-Mail öffnen und den Bestätigungslink anklicken.",
+        );
+        return;
+      }
+    }
+
+    _showError("Login fehlgeschlagen. Daten prüfen.");
+  } finally {
+    if (mounted) {
       setState(() => isLoading = false);
     }
   }
+}
 
   Future<void> _register() async {
-    if (forenameController.text.isEmpty ||
-        surnameController.text.isEmpty ||
-        emailController.text.isEmpty ||
-        passwordController.text.length < 8) {
-      _showError(
-        "Bitte alle Felder füllen (Vorname, Nachname, E-Mail, Passwort min. 8 Zeichen).",
-      );
-      return;
+  if (forenameController.text.isEmpty ||
+      surnameController.text.isEmpty ||
+      emailController.text.isEmpty ||
+      passwordController.text.length < 8) {
+    _showError(
+      "Bitte alle Felder füllen (Vorname, Nachname, E-Mail, Passwort min. 8 Zeichen).",
+    );
+    return;
+  }
+
+  setState(() => isLoading = true);
+  try {
+    // 1. User anlegen
+    await pb.collection('users').create(body: {
+      "email": emailController.text.trim(),
+      "password": passwordController.text,
+      "passwordConfirm": passwordController.text,
+      "forename": forenameController.text.trim(),
+      "surname": surnameController.text.trim(),
+      "name":
+          "${forenameController.text.trim()} ${surnameController.text.trim()}",
+    });
+
+    // 2. Verifizierungs-Mail auslösen
+    await pb.collection('users').requestVerification(
+      emailController.text.trim(),
+    );
+
+    // 3. Hinweis anzeigen und auf Login umschalten
+    _showSuccess(
+      "Registrierung erfolgreich.\nBitte E-Mail-Adresse bestätigen, bevor du dich einloggst.",
+    );
+    setState(() => isLoginMode = true);
+  } catch (e) {
+    // Spezifische Meldung, wenn E-Mail schon existiert
+    if (e is ClientException) {
+      final msg = (e.response['message'] ?? '').toString().toLowerCase();
+      final data = e.response['data'] as Map<String, dynamic>?;
+
+      final emailError = data?['email']?['message']?.toString().toLowerCase();
+
+      if (emailError != null &&
+          (emailError.contains('exists') ||
+           emailError.contains('already'))) {
+        _showError("Diese E-Mail-Adresse ist bereits registriert.");
+        return;
+      }
+
+      if (msg.contains('exists') || msg.contains('already')) {
+        _showError("Diese E-Mail-Adresse ist bereits registriert.");
+        return;
+      }
     }
 
-    setState(() => isLoading = true);
-    try {
-      await pb.collection('users').create(body: {
-        "email": emailController.text.trim(),
-        "password": passwordController.text,
-        "passwordConfirm": passwordController.text,
-        "forename": forenameController.text.trim(),
-        "surname": surnameController.text.trim(),
-        // optional: kombiniertes name-Feld, falls du es noch irgendwo brauchst
-        "name": "${forenameController.text.trim()} ${surnameController.text.trim()}",
-      });
-
-      await _login();
-    } catch (e) {
-      _showError("Registrierung fehlgeschlagen: $e");
-    } finally {
+    _showError("Registrierung fehlgeschlagen: $e");
+  } finally {
+    if (mounted) {
       setState(() => isLoading = false);
     }
   }
-
+}
+  
   Future<void> _resetPassword() async {
     if (emailController.text.isEmpty) {
       _showError("Bitte E-Mail eingeben, um Passwort zurückzusetzen.");
