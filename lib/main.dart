@@ -12,7 +12,7 @@ import 'admin/trainer_home.dart';
 import 'admin/admin_home.dart';
 
 // Globale PocketBase-Instanz
-final pb = PocketBase('http://api.tc-moeckmuehl.de:8090');
+final pb = PocketBase('https://api.tc-moeckmuehl.de');
 
 // Deine Settings-Record-ID hier eintragen:
 const String settingsRecordId = 'b9wkhz7wuqxqpid';
