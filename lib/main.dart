@@ -33,6 +33,10 @@ final ValueNotifier<Color> ownBookingColor =
 final ValueNotifier<Color> otherBookingColor =
     ValueNotifier<Color>(Colors.red); // Fremde Buchungen
 
+final ValueNotifier<Color> eventBookingColor =
+    ValueNotifier<Color>(Colors.purple); // Verbands-/Turnierbuchungen
+
+
 // Hilfsfunktionen für Hex <-> Color
 Color colorFromHex(String? hex, Color fallback) {
   if (hex == null || hex.isEmpty) return fallback;
@@ -70,6 +74,9 @@ void main() async {
         settings.getStringValue('court_color_own'), Colors.blue);
     otherBookingColor.value = colorFromHex(
         settings.getStringValue('court_color_other'), Colors.red);
+    eventBookingColor.value = colorFromHex(
+        settings.getStringValue('court_color_event'), Colors.purple);
+
   } catch (_) {
     // Falls Laden fehlschlägt, bleiben die Standardfarben
   }

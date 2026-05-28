@@ -13,6 +13,7 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
   late Color _appFrontColor;
   late Color _ownColor;
   late Color _otherColor;
+  late Color _eventColor;
   bool _saving = false;
 
   @override
@@ -23,6 +24,7 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
     _appFrontColor = appFrontColor.value;
     _ownColor = ownBookingColor.value;
     _otherColor = otherBookingColor.value;
+    _eventColor = eventBookingColor.value;
   }
 
   Future<void> _saveColors() async {
@@ -33,6 +35,7 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
         'app_colour_front': colorToHex(_appFrontColor),
         'court_color_own': colorToHex(_ownColor),
         'court_color_other': colorToHex(_otherColor),
+        'court_color_event': colorToHex(_eventColor),
       });
 
       // Globale Notifier aktualisieren -> ganze App färbt sich um
@@ -40,6 +43,7 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
       appFrontColor.value = _appFrontColor;
       ownBookingColor.value = _ownColor;
       otherBookingColor.value = _otherColor;
+      eventBookingColor.value = _eventColor;
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -247,6 +251,29 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
                 onChanged: (c) {
                   setState(() {
                     _otherColor = c;
+                  });
+                },
+              );
+            },
+            child: const Text("Wählen"),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Ereignisbuchungen
+        ListTile(
+          leading: CircleAvatar(
+            backgroundColor: _eventColor.withValues(alpha: 0.7),
+          ),
+          title: const Text("Ereignisbuchungen"),
+          subtitle: const Text("Farbe für Verbands-/Turnierbuchungen"),
+          trailing: TextButton(
+            onPressed: () async {
+              await _pickColor(
+                initial: _eventColor,
+                onChanged: (c) {
+                  setState(() {
+                    _eventColor = c;
                   });
                 },
               );
