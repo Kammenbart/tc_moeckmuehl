@@ -49,6 +49,7 @@ class _CourtTabState extends State<CourtTab> {
     filter: 'abo = "$aboId"',
     sort: 'start_time',
   );
+  if (res.isEmpty) return [booking];
   return res;
 }
 
@@ -90,7 +91,7 @@ class _CourtTabState extends State<CourtTab> {
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text("Buchung bearbeiten"),
-          content: const Text("Möchtest du diese Buchung stornieren?"),
+          content: const Text("Möchtest du diese Buchung wirklich stornieren?"),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
@@ -116,7 +117,7 @@ class _CourtTabState extends State<CourtTab> {
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("Abo bearbeiten"),
+        title: const Text("Abo stornieren"),
         content: const Text(
           "Möchtest du nur diesen Termin oder das gesamte Abo stornieren?",
         ),
@@ -155,6 +156,869 @@ class _CourtTabState extends State<CourtTab> {
       ),
     );
   }
+
+  Future<void> _editSingleBooking(RecordModel booking) async {
+  // Nur Einzelbuchung bearbeiten
+  final currentUserId = pb.authStore.model?.id;
+  if (currentUserId == null) return;
+
+  // Grunddaten aus Booking
+  final courtId = booking.getStringValue('court');
+  final courtExpand = booking.expand['court'] as List<RecordModel>?;
+  final courtName = (courtExpand != null && courtExpand.isNotEmpty)
+      ? courtExpand.first.getStringValue('name')
+      : 'Platz';
+
+  DateTime start =
+      DateTime.parse(booking.getStringValue('start_time')).toLocal();
+  DateTime end =
+      DateTime.parse(booking.getStringValue('end_time')).toLocal();
+
+  TimeOfDay startTime = TimeOfDay(hour: start.hour, minute: start.minute);
+  TimeOfDay endTime = TimeOfDay(hour: end.hour, minute: end.minute);
+
+  // Mitspieler (RecordModel) aus expand übernehmen
+  List<RecordModel> selectedPlayers =
+      List<RecordModel>.from(booking.expand['players'] ?? []);
+
+  // Gäste als Liste
+  List<String> guestNames = [];
+  final existingGuests = booking.getStringValue('guests');
+  if (existingGuests.isNotEmpty) {
+    guestNames = existingGuests
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+  }
+  final guestController = TextEditingController();
+  final userRecord = pb.authStore.record as RecordModel;
+  final isAppAdmin = userRecord.getBoolValue('auth_admin_app');
+  final permBoardBooking = userRecord.getIntValue('perm_board_booking');
+  final canSetEventType = isAppAdmin || permBoardBooking >= 1;
+  String eventType = booking.getStringValue('event_type');
+
+  await showDialog(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: Text("Buchung bearbeiten – $courtName"),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Start / Ende
+              Row(
+                children: [
+                  Expanded(
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text("Start"),
+                      subtitle: Text(
+                        "${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')} Uhr",
+                      ),
+                      onTap: () async {
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: startTime,
+                        );
+                        if (picked != null) {
+                          setDialogState(() => startTime = picked);
+                        }
+                      },
+                    ),
+                  ),
+                  Expanded(
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text("Ende"),
+                      subtitle: Text(
+                        "${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')} Uhr",
+                      ),
+                      onTap: () async {
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: endTime,
+                        );
+                        if (picked != null) {
+                          setDialogState(() => endTime = picked);
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              const Text("Mitspieler:",
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              Wrap(
+                spacing: 5,
+                children: selectedPlayers
+                    .map(
+                      (p) => Chip(
+                        label: Text(
+                          "${p.getStringValue('forename')} ${p.getStringValue('surname')}"
+                              .trim(),
+                        ),
+                        onDeleted: () => setDialogState(
+                            () => selectedPlayers.remove(p)),
+                      ),
+                    )
+                    .toList(),
+              ),
+              TextButton.icon(
+                onPressed: () => _pickPlayer(
+                  allUsers,
+                  selectedPlayers,
+                  (p) => setDialogState(() => selectedPlayers.add(p)),
+                ),
+                icon: const Icon(Icons.person_add),
+                label: const Text("Mitglied hinzufügen"),
+              ),
+              TextField(
+                controller: guestController,
+                decoration: InputDecoration(
+                  hintText: "Gast Name",
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.add),
+                    onPressed: () {
+                      if (guestController.text.isNotEmpty) {
+                        setDialogState(() {
+                          guestNames.add(guestController.text.trim());
+                        });
+                        guestController.clear();
+                      }
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 5,
+                children: guestNames
+                    .asMap()
+                    .entries
+                    .map(
+                      (e) => Chip(
+                        label: Text(e.value),
+                        onDeleted: () => setDialogState(
+                            () => guestNames.removeAt(e.key)),
+                      ),
+                    )
+                    .toList(),
+              ),
+              const SizedBox(height: 10),
+              if (canSetEventType)
+                DropdownButtonFormField<String>(
+                  value: eventType.isEmpty ? null : eventType,
+                  decoration: const InputDecoration(
+                    labelText: "Ligaspiel / Turnier",
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: '', child: Text("Keine")),
+                    DropdownMenuItem(
+                        value: 'Ligaspiel', child: Text("Ligaspiel")),
+                    DropdownMenuItem(
+                        value: 'Turnier', child: Text("Turnier")),
+                  ],
+                  onChanged: (v) => setDialogState(() => eventType = v ?? ''),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Abbrechen"),
+          ),
+          TextButton(
+            onPressed: () async {
+              // Buchung komplett stornieren
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (_) => const Center(child: CircularProgressIndicator()),
+              );
+
+              try {
+                await pb.collection('bookings').delete(booking.id);
+                if (!mounted) return;
+                Navigator.pop(context); // Lade-Dialog
+                Navigator.pop(context); // Edit-Dialog
+                _refreshData();
+              } catch (e) {
+                if (!mounted) return;
+                Navigator.pop(context); // Lade-Dialog
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text("Fehler beim Stornieren: $e"),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text("Stornieren"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: appFrontColor.value,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              // neue Start-/Endzeiten zusammenbauen (gleiches Datum wie vorher)
+              final newStart = DateTime(
+                start.year,
+                start.month,
+                start.day,
+                startTime.hour,
+                startTime.minute,
+              );
+              final newEnd = DateTime(
+                end.year,
+                end.month,
+                end.day,
+                endTime.hour,
+                endTime.minute,
+              );
+
+              if (!newEnd.isAfter(newStart)) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content:
+                        Text("Endzeit muss nach der Startzeit liegen."),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              // Überschneidungsprüfung (andere Buchungen auf demselben Platz)
+              try {
+                final overallStartIso =
+                    newStart.toUtc().toIso8601String();
+                final overallEndIso =
+                    newEnd.toUtc().toIso8601String();
+
+                final existing =
+                    await pb.collection('bookings').getFullList(
+                          filter:
+                              'court = "$courtId" && id != "${booking.id}" && start_time < "$overallEndIso" && end_time > "$overallStartIso"',
+                        );
+
+                final hasOverlap = existing.isNotEmpty;
+
+                if (hasOverlap) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        "In diesem Zeitraum ist der Platz bereits belegt.\nBitte andere Zeit wählen.",
+                      ),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+              } catch (e) {
+                debugPrint("Fehler bei Überschneidungsprüfung (Edit): $e");
+              }
+
+              // Update durchführen
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (_) =>
+                    const Center(child: CircularProgressIndicator()),
+              );
+
+              try {
+                await pb.collection('bookings').update(booking.id, body: {
+                  "start_time": newStart.toUtc().toIso8601String(),
+                  "end_time": newEnd.toUtc().toIso8601String(),
+                  "players":
+                      selectedPlayers.map((p) => p.id).toList(),
+                  "guests": guestNames.join(", "),
+                  "event_type": eventType,
+                });
+
+                if (!mounted) return;
+                Navigator.pop(context); // Lade-Dialog
+                Navigator.pop(context); // Edit-Dialog
+                _refreshData();
+                _showEditSuccessDialog("Deine Buchung wurde erfolgreich aktualisiert.");
+              } catch (e) {
+                if (!mounted) return;
+                Navigator.pop(context); // Lade-Dialog
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text("Fehler beim Aktualisieren: $e"),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            child: const Text("Speichern"),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+Future<void> _editAboBooking(RecordModel booking) async {
+  try {
+    final currentUserId = pb.authStore.model?.id;
+    if (currentUserId == null) return;
+
+    // Serie laden
+    final series = await _getAboSeries(booking);
+    final currentStart =
+        DateTime.parse(booking.getStringValue('start_time')).toLocal();
+
+    // alle zukünftigen (inkl. aktuellem) Termine
+    final futureSeries = series.where((b) {
+      final s = DateTime.parse(b.getStringValue('start_time')).toLocal();
+      return !s.isBefore(currentStart);
+    }).toList();
+
+    // Grunddaten aus aktuellem Booking
+    final courtId = booking.getStringValue('court');
+    final dynamic courtExpandAny = booking.expand['court'];
+    RecordModel? courtRecord;
+    if (courtExpandAny is List && courtExpandAny.isNotEmpty) {
+      courtRecord = courtExpandAny.first as RecordModel;
+    }
+    final courtName = courtRecord?.getStringValue('name') ?? 'Platz';
+
+    DateTime start = currentStart;
+    DateTime end =
+        DateTime.parse(booking.getStringValue('end_time')).toLocal();
+
+    TimeOfDay startTime = TimeOfDay(hour: start.hour, minute: start.minute);
+    TimeOfDay endTime = TimeOfDay(hour: end.hour, minute: end.minute);
+
+    // Mitspieler/Gäste aus aktuellem Termin
+    final dynamic playersExpandAny = booking.expand['players'];
+    List<RecordModel> selectedPlayers =
+        playersExpandAny is List<RecordModel>
+            ? List<RecordModel>.from(playersExpandAny)
+            : <RecordModel>[];
+
+    List<String> guestNames = [];
+    final existingGuests = booking.getStringValue('guests');
+    if (existingGuests.isNotEmpty) {
+      guestNames = existingGuests
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    }
+    final guestController = TextEditingController();
+
+    final userRecord = pb.authStore.record as RecordModel;
+    final isAppAdmin = userRecord.getBoolValue('auth_admin_app');
+    final permBoardBooking = userRecord.getIntValue('perm_board_booking');
+    final canSetEventType = isAppAdmin || permBoardBooking >= 1;
+    String eventType = booking.getStringValue('event_type');
+
+    // Checkbox: Änderungen auf alle zukünftigen Abo-Termine?
+    bool applyToFuture = false;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text("Abo-Termin bearbeiten – $courtName"),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Start / Ende
+                Row(
+                  children: [
+                    Expanded(
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text("Start"),
+                        subtitle: Text(
+                          "${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')} Uhr",
+                        ),
+                        onTap: () async {
+                          final picked = await showTimePicker(
+                            context: context,
+                            initialTime: startTime,
+                          );
+                          if (picked != null) {
+                            setDialogState(() => startTime = picked);
+                          }
+                        },
+                      ),
+                    ),
+                    Expanded(
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text("Ende"),
+                        subtitle: Text(
+                          "${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')} Uhr",
+                        ),
+                        onTap: () async {
+                          final picked = await showTimePicker(
+                            context: context,
+                            initialTime: endTime,
+                          );
+                          if (picked != null) {
+                            setDialogState(() => endTime = picked);
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+
+                const Text("Mitspieler:",
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                Wrap(
+                  spacing: 5,
+                  children: selectedPlayers
+                      .map(
+                        (p) => Chip(
+                          label: Text(
+                            "${p.getStringValue('forename')} ${p.getStringValue('surname')}"
+                                .trim(),
+                          ),
+                          onDeleted: () => setDialogState(
+                              () => selectedPlayers.remove(p)),
+                        ),
+                      )
+                      .toList(),
+                ),
+                TextButton.icon(
+                  onPressed: () => _pickPlayer(
+                    allUsers,
+                    selectedPlayers,
+                    (p) =>
+                        setDialogState(() => selectedPlayers.add(p)),
+                  ),
+                  icon: const Icon(Icons.person_add),
+                  label: const Text("Mitglied hinzufügen"),
+                ),
+                TextField(
+                  controller: guestController,
+                  decoration: InputDecoration(
+                    hintText: "Gast Name",
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.add),
+                      onPressed: () {
+                        if (guestController.text.isNotEmpty) {
+                          setDialogState(() {
+                            guestNames.add(
+                                guestController.text.trim());
+                          });
+                          guestController.clear();
+                        }
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 5,
+                  children: guestNames
+                      .asMap()
+                      .entries
+                      .map(
+                        (e) => Chip(
+                          label: Text(e.value),
+                          onDeleted: () => setDialogState(
+                              () => guestNames.removeAt(e.key)),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 10),
+                if (canSetEventType)
+                  DropdownButtonFormField<String>(
+                    value: eventType.isEmpty ? null : eventType,
+                    decoration: const InputDecoration(
+                      labelText: "Ligaspiel / Turnier",
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                          value: '', child: Text("Keine")),
+                      DropdownMenuItem(
+                          value: 'Ligaspiel', child: Text("Ligaspiel")),
+                      DropdownMenuItem(
+                          value: 'Turnier', child: Text("Turnier")),
+                    ],
+                    onChanged: (v) =>
+                        setDialogState(() => eventType = v ?? ''),
+                  ),
+                const SizedBox(height: 10),
+                CheckboxListTile(
+                  value: applyToFuture,
+                  onChanged: (v) =>
+                      setDialogState(() => applyToFuture = v ?? false),
+                  title: const Text("Mehrere Termine bearbeiten"),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Abbrechen"),
+            ),
+            // Stornieren mit Scope-Frage
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(context); // Edit-Dialog zu
+
+                await showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text("Abo stornieren"),
+                    content: const Text(
+                      "Möchtest du nur diesen Termin oder alle zukünftigen Termine dieses Abos stornieren?",
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text("Abbrechen"),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          await _deleteBookingList([booking]); // nur dieser
+                        },
+                        style: TextButton.styleFrom(
+                            foregroundColor: Colors.red),
+                        child: const Text("Nur diesen Termin"),
+                      ),
+                      ElevatedButton(
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          await _deleteBookingList(futureSeries);
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                  "Alle zukünftigen Abo-Termine wurden storniert."),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: const Text("Alle zukünftigen"),
+                      ),
+                    ],
+                  ),
+                );
+              },
+              style:
+                  TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text("Stornieren"),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: appFrontColor.value,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                // neue Start-/Endzeiten (für den aktuellen Termin)
+                final newStart = DateTime(
+                  start.year,
+                  start.month,
+                  start.day,
+                  startTime.hour,
+                  startTime.minute,
+                );
+                final newEnd = DateTime(
+                  end.year,
+                  end.month,
+                  end.day,
+                  endTime.hour,
+                  endTime.minute,
+                );
+
+                if (!newEnd.isAfter(newStart)) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Endzeit muss nach der Startzeit liegen."),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                // FALL 1: Nur dieser Termin (kein Haken)
+                if (!applyToFuture) {
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (_) =>
+                        const Center(child: CircularProgressIndicator()),
+                  );
+
+                  try {
+                    await pb.collection('bookings').update(booking.id, body: {
+                      "start_time": newStart.toUtc().toIso8601String(),
+                      "end_time": newEnd.toUtc().toIso8601String(),
+                      "players": selectedPlayers.map((p) => p.id).toList(),
+                      "guests": guestNames.join(", "),
+                      "event_type": eventType,
+                    });
+
+                    if (!mounted) return;
+                    Navigator.pop(context); // Lade-Dialog
+                    Navigator.pop(context); // Edit-Dialog
+                    _refreshData();
+                    _showEditSuccessDialog("Der Termin wurde erfolgreich aktualisiert.");
+                  } catch (e) {
+                    if (!mounted) return;
+                    Navigator.pop(context); // Lade-Dialog
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content:
+                            Text("Fehler beim Aktualisieren des Abos: $e"),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                  return;
+                }
+
+                // FALL 2: Mehrere zukünftige Termine (Haken gesetzt)
+
+                // Ziele: alle zukünftigen inkl. aktuellem
+                final targets = futureSeries;
+
+                // neue Intervalle pro Zieltermin mit neuer Uhrzeit
+                final List<_AboTerm> newIntervals = [];
+                for (final b in targets) {
+                  final s = DateTime.parse(b.getStringValue('start_time'))
+                      .toLocal();
+                  final e = DateTime.parse(b.getStringValue('end_time'))
+                      .toLocal();
+
+                  final ns = DateTime(
+                    s.year,
+                    s.month,
+                    s.day,
+                    startTime.hour,
+                    startTime.minute,
+                  );
+                  final ne = DateTime(
+                    e.year,
+                    e.month,
+                    e.day,
+                    endTime.hour,
+                    endTime.minute,
+                  );
+                  newIntervals.add(_AboTerm(start: ns, end: ne));
+                }
+
+                // Gesamtzeitraum für Query
+                final overallStartIso =
+                    newIntervals.first.start.toUtc().toIso8601String();
+                final overallEndIso =
+                    newIntervals.last.end.toUtc().toIso8601String();
+
+                // alle Buchungen am Platz in diesem Zeitraum laden
+                final existing =
+                    await pb.collection('bookings').getFullList(
+                          filter:
+                              'court = "$courtId" && start_time < "$overallEndIso" && end_time > "$overallStartIso"',
+                        );
+
+                final targetIds = targets.map((b) => b.id).toSet();
+
+                // Für jeden Zieltermin prüfen, ob Konflikt
+                final List<_AboTerm> previewTerms = [];
+                final List<bool> hasConflict = [];
+
+                for (int i = 0; i < targets.length; i++) {
+                  final ni = newIntervals[i];
+                  final conflict = existing.any((b) {
+                    if (targetIds.contains(b.id)) return false; // eigenen Termin ignorieren
+                    final es = DateTime.parse(b.getStringValue('start_time'))
+                        .toLocal();
+                    final ee = DateTime.parse(b.getStringValue('end_time'))
+                        .toLocal();
+                    return ni.start.isBefore(ee) && ni.end.isAfter(es);
+                  });
+                  previewTerms.add(ni);
+                  hasConflict.add(conflict);
+                }
+
+                // Vorschau-Dialog wie bei Abo-Erstellung
+                await showDialog(
+                  context: context,
+                  builder: (ctx) {
+                    final List<bool> selected = List<bool>.generate(
+                      previewTerms.length,
+                      (i) => !hasConflict[i],
+                    );
+
+                    return StatefulBuilder(
+                      builder: (ctx, setState) {
+                        return AlertDialog(
+                          title: const Text("Abo-Termine übernehmen"),
+                          content: SizedBox(
+                            width: double.maxFinite,
+                            child: SingleChildScrollView(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: List.generate(
+                                  previewTerms.length,
+                                  (i) {
+                                    final t = previewTerms[i];
+                                    final label =
+                                        "${DateFormat('EEEE, dd.MM.yyyy', 'de_DE').format(t.start)} "
+                                        "${DateFormat('HH:mm', 'de_DE').format(t.start)} – "
+                                        "${DateFormat('HH:mm', 'de_DE').format(t.end)} Uhr";
+
+                                    if (hasConflict[i]) {
+                                      return ListTile(
+                                        title: Text(
+                                          label,
+                                          style: const TextStyle(
+                                            color: Colors.red,
+                                            decoration:
+                                                TextDecoration.lineThrough,
+                                          ),
+                                        ),
+                                        subtitle: const Text(
+                                          "Bereits belegt",
+                                          style:
+                                              TextStyle(color: Colors.red),
+                                        ),
+                                      );
+                                    } else {
+                                      return CheckboxListTile(
+                                        value: selected[i],
+                                        onChanged: (v) => setState(
+                                            () => selected[i] = v ?? false),
+                                        title: Text(label),
+                                      );
+                                    }
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text("Abbrechen"),
+                            ),
+                            ElevatedButton(
+                              onPressed: () async {
+                                final List<int> toApplyIdx = [];
+                                for (int i = 0;
+                                    i < previewTerms.length;
+                                    i++) {
+                                  if (!hasConflict[i] && selected[i]) {
+                                    toApplyIdx.add(i);
+                                  }
+                                }
+
+                                if (toApplyIdx.isEmpty) {
+                                  ScaffoldMessenger.of(context)
+                                      .showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                          "Keine Termine ausgewählt. Es wurden keine Änderungen übernommen."),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                  Navigator.pop(ctx);
+                                  return;
+                                }
+
+                                Navigator.pop(ctx); // Vorschau zu
+
+                                showDialog(
+                                  context: context,
+                                  barrierDismissible: false,
+                                  builder: (_) => const Center(
+                                      child:
+                                          CircularProgressIndicator()),
+                                );
+
+                                try {
+                                  for (final i in toApplyIdx) {
+                                    final b = targets[i];
+                                    final ni = previewTerms[i];
+
+                                    await pb
+                                        .collection('bookings')
+                                        .update(b.id, body: {
+                                      "start_time": ni.start
+                                          .toUtc()
+                                          .toIso8601String(),
+                                      "end_time": ni.end
+                                          .toUtc()
+                                          .toIso8601String(),
+                                      "players": selectedPlayers
+                                          .map((p) => p.id)
+                                          .toList(),
+                                      "guests": guestNames.join(", "),
+                                      "event_type": eventType,
+                                    });
+                                  }
+
+                                  if (!mounted) return;
+                                  Navigator.pop(context); // Lade-Dialog
+                                  Navigator.pop(context); // Edit-Dialog
+                                  _refreshData();
+                                  _showEditSuccessDialog("Die ausgewählten Abo-Termine wurden erfolgreich aktualisiert.");
+                                } catch (e) {
+                                  if (!mounted) return;
+                                  Navigator.pop(context); // Lade-Dialog
+                                  ScaffoldMessenger.of(context)
+                                      .showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                          "Fehler beim Aktualisieren des Abos: $e"),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              },
+                              child:
+                                  const Text("Ausgewählte übernehmen"),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+              child: const Text("Speichern"),
+            ),
+          ],
+        ),
+      ),
+    );
+  } catch (e) {
+    debugPrint("Fehler in _editAboBooking: $e");
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Fehler beim Öffnen des Abo-Editors: $e"),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+}
 
   Future<void> _refreshData() async {
   setState(() => isLoading = true);
@@ -485,7 +1349,7 @@ class _CourtTabState extends State<CourtTab> {
 
               // Buchungsart
               DropdownButtonFormField<String>(
-                value: bookingType,
+                initialValue: bookingType,
                 decoration: const InputDecoration(
                   labelText: "Buchungsart",
                   border: OutlineInputBorder(),
@@ -589,7 +1453,7 @@ class _CourtTabState extends State<CourtTab> {
               // Liga-/Turnierbuchung (nur für Berechtigte)
               if (canSetEventType)
                 DropdownButtonFormField<String>(
-                  value: eventType.isEmpty ? null : eventType,
+                  initialValue: eventType.isEmpty ? null : eventType,
                   decoration: const InputDecoration(
                     labelText: "Ligaspiel / Turnier",
                     border: OutlineInputBorder(),
@@ -753,6 +1617,46 @@ class _CourtTabState extends State<CourtTab> {
   );
 }
 
+void _showEditSuccessDialog(String message) {
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.check_circle_outline,
+              color: Colors.green, size: 80),
+          const SizedBox(height: 16),
+          const Text(
+            "Änderung gespeichert!",
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey.shade700),
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+              shape:
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              minimumSize: const Size(double.infinity, 45),
+            ),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Ok"),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 Future<void> _showAboPreviewAndBook({
   required RecordModel court,
   required DateTime firstStart,
@@ -892,38 +1796,19 @@ Future<void> _showAboPreviewAndBook({
                   );
 
                   try {
-                    // Termine nach Datum sortieren, damit der erste Termin wirklich der erste in der Serie ist
+                    // Termine nach Datum sortieren
                     final toBookSorted = [...toBook]
                       ..sort((a, b) => a.start.compareTo(b.start));
 
-                    // 1. Ersten Termin ohne "abo" erstellen, um an die ID zu kommen
-                    final firstTerm = toBookSorted.first;
-                    final firstRecord = await pb.collection('bookings').create(body: {
-                      "user": pb.authStore.record!.id,
-                      "court": court.id,
-                      "start_time": firstTerm.start.toUtc().toIso8601String(),
-                      "end_time": firstTerm.end.toUtc().toIso8601String(),
-                      "players": selectedPlayers.map((p) => p.id).toList(),
-                      "guests": guestNames.join(", "),
-                      "booking_type": "abo",
-                      "event_type": eventType,
-                      // "abo" kommt gleich in einem Update rein
-                    });
+                    // Serien-ID clientseitig erzeugen (einfacher String, der bei allen gleich ist)
+                    final currentUserId = pb.authStore.record!.id;
+                    final aboId =
+                        "${currentUserId}_${court.id}_${DateTime.now().millisecondsSinceEpoch}";
 
-                    final aboId = firstRecord.id;
-
-                    // 2. Ersten Termin updaten: eigene ID ins "abo"-Feld schreiben
-                    await pb.collection('bookings').update(
-                      aboId,
-                      body: {
-                        "abo": aboId,
-                      },
-                    );
-
-                    // 3. Alle weiteren Termine mit "abo": aboId anlegen
-                    for (final t in toBookSorted.skip(1)) {
+                    // Alle Termine mit gleichem "abo"-Wert anlegen
+                    for (final t in toBookSorted) {
                       await pb.collection('bookings').create(body: {
-                        "user": pb.authStore.record!.id,
+                        "user": currentUserId,
                         "court": court.id,
                         "start_time": t.start.toUtc().toIso8601String(),
                         "end_time": t.end.toUtc().toIso8601String(),
@@ -931,7 +1816,7 @@ Future<void> _showAboPreviewAndBook({
                         "guests": guestNames.join(", "),
                         "booking_type": "abo",
                         "event_type": eventType,
-                        "abo": aboId, // hier direkt die ID des ersten Termins speichern
+                        "abo": aboId, // gleiche Serien-ID für alle Termine
                       });
                     }
 
@@ -954,16 +1839,17 @@ Future<void> _showAboPreviewAndBook({
                       ),
                     );
                   }
-                },
-                child: const Text("Ausgewählte Termine buchen"),
-              ),
-            ],
-          );
-        },
-      );
-    },
-  );
-}
+
+                                  },
+                                  child: const Text("Ausgewählte Termine buchen"),
+                                ),
+                              ],
+                            );
+                          },
+                        );
+                      },
+                    );
+                  }
 
 void _showSuccessDialog(String courtName, DateTime date, int weeks) {
   showDialog(
@@ -1058,19 +1944,24 @@ void _showSuccessDialog(String courtName, DateTime date, int weeks) {
     final currentUserId = pb.authStore.model?.id;
     final ownerList = booking.expand['user'];
     final ownerName = (ownerList != null && ownerList.isNotEmpty)
-        ? ownerList[0].getStringValue('surname')
+        ? "${ownerList[0].getStringValue('forename')} ${ownerList[0].getStringValue('surname')}".trim()
         : 'Unbekannt';
-    final List<RecordModel> playerRecords = List<RecordModel>.from(booking.expand['players'] ?? []);
-    final String formattedPlayerNames = playerRecords.map((p) => p.getStringValue('surname')).join(', ');
+    final List<RecordModel> playerRecords =
+          List<RecordModel>.from(booking.expand['players'] ?? []);
+    final String formattedPlayerNames = playerRecords
+        .map((p) =>
+            "${p.getStringValue('forename')} ${p.getStringValue('surname')}".trim())
+        .join(', ');
     final List<dynamic> playerIds = booking.getListValue('players');
-    final bool canCancel = booking.getStringValue('user') == currentUserId || playerIds.contains(currentUserId);
-    final String guestNames = booking.getStringValue('guests');
-    final String bookingType = booking.getStringValue('booking_type');
-    final bool isAbo = bookingType == 'abo';
-
-    // Nur der Besitzer darf "Bearbeiten" sehen
     final bool isOwner = booking.getStringValue('user') == currentUserId;
-    final bool canEdit = isOwner;
+    final bool isPlayer = playerIds.contains(currentUserId);
+    final bool canCancel = isOwner || isPlayer;
+    final String guestNames = booking.getStringValue('guests');
+    final bool isAbo = booking.getStringValue('abo').isNotEmpty;
+
+    // Bearbeiten: gleiche Rechte wie Stornieren bei Einzelbuchung,
+    // bei Abo lassen wir zunächst nur den Owner bearbeiten (wird später noch erweitert)
+    final bool canEdit = isAbo ? isOwner : (isOwner || isPlayer);
 
     showDialog(
       context: context,
@@ -1093,29 +1984,19 @@ void _showSuccessDialog(String courtName, DateTime date, int weeks) {
             ],
           ],
         ),
-         actions: [
+        actions: [
           if (canEdit)
             TextButton(
               onPressed: () async {
                 Navigator.pop(context); // Detaildialog schließen
-                await _showEditBookingOrSeries(booking);
+                if (isAbo) {
+                  await _editAboBooking(booking);
+                } else {
+                  await _editSingleBooking(booking);
+                }
               },
               child: Text(isAbo ? "Abo bearbeiten" : "Buchung bearbeiten"),
             ),
-
-          // Optional: Schnell-Storno wie bisher (kannst du auch weglassen,
-          // wenn du alles über "Bearbeiten" abwickeln möchtest)
-          if (canCancel)
-            TextButton(
-              onPressed: () async {
-                await pb.collection('bookings').delete(booking.id);
-                Navigator.pop(context);
-                _refreshData();
-              },
-              style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text("Stornieren"),
-            ),
-
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text("Schließen"),
