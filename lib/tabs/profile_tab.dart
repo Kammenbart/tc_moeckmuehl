@@ -18,7 +18,6 @@ class _ProfileTabState extends State<ProfileTab> {
   late TextEditingController forenameController;
   late TextEditingController surnameController;
   late TextEditingController phoneController;
-  late TextEditingController mobileController;
   late TextEditingController ibanController;
   late TextEditingController bicController;
   late TextEditingController bankNameController;
@@ -42,8 +41,6 @@ class _ProfileTabState extends State<ProfileTab> {
         TextEditingController(text: user.getStringValue('surname'));
     phoneController =
         TextEditingController(text: user.getStringValue('phone'));
-    mobileController =
-        TextEditingController(text: user.getStringValue('mobile'));
     ibanController =
         TextEditingController(text: user.getStringValue('iban'));
     bicController =
@@ -59,7 +56,6 @@ class _ProfileTabState extends State<ProfileTab> {
     forenameController.dispose();
     surnameController.dispose();
     phoneController.dispose();
-    mobileController.dispose();
     ibanController.dispose();
     bicController.dispose();
     bankNameController.dispose();
@@ -74,7 +70,6 @@ class _ProfileTabState extends State<ProfileTab> {
       "forename": forenameController.text.trim(),
       "surname": surnameController.text.trim(),
       "phone": phoneController.text.trim(),
-      "mobile": mobileController.text.trim(),
       "iban": ibanController.text.trim(),
       "bic": bicController.text.trim(),
       "bank_name": bankNameController.text.trim(),
@@ -97,6 +92,34 @@ class _ProfileTabState extends State<ProfileTab> {
       );
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _refreshProfile() async {
+    try {
+      final refreshed =
+          await pb.collection('users').getOne(user.id);
+
+      user = refreshed;
+
+      forenameController.text = user.getStringValue('forename');
+      surnameController.text = user.getStringValue('surname');
+      phoneController.text = user.getStringValue('phone');
+      ibanController.text = user.getStringValue('iban');
+      bicController.text = user.getStringValue('bic');
+      bankNameController.text = user.getStringValue('bank_name');
+      bankOwnerController.text = user.getStringValue('bank_owner');
+
+      if (mounted) setState(() {});
+    } catch (e) {
+      debugPrint("Fehler beim Aktualisieren des Profils: $e");
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Profil konnte nicht aktualisiert werden."),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -311,12 +334,15 @@ class _ProfileTabState extends State<ProfileTab> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Column(
+      body: RefreshIndicator(
+        onRefresh: _refreshProfile,
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   
@@ -407,19 +433,9 @@ class _ProfileTabState extends State<ProfileTab> {
                         const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     child: TextField(
                       controller: phoneController,
+                      keyboardType: TextInputType.phone,
                       decoration: const InputDecoration(
-                        labelText: "Telefon",
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                    child: TextField(
-                      controller: mobileController,
-                      decoration: const InputDecoration(
-                        labelText: "Mobil",
+                        labelText: "Telefon/Mobilnummer",
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -468,7 +484,7 @@ class _ProfileTabState extends State<ProfileTab> {
                     child: TextField(
                       controller: bankOwnerController,
                       decoration: const InputDecoration(
-                        labelText: "Kontoinhaber",
+                        labelText: "Abweichender Kontoinhaber",
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -527,6 +543,7 @@ class _ProfileTabState extends State<ProfileTab> {
           ),
         ],
       ),
+      )
     );
   }
 }

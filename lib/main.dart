@@ -11,6 +11,7 @@ import 'tabs/profile_tab.dart';
 import 'admin/vorstand_home.dart';
 import 'admin/trainer_home.dart';
 import 'admin/admin_home.dart';
+import 'onboarding_screen.dart';
 
 // Deine Settings-Record-ID hier eintragen:
 const String settingsRecordId = 'b9wkhz7wuqxqpid';
@@ -176,7 +177,22 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    if (pb.authStore.isValid) return const HomeScreen();
+    if (pb.authStore.isValid) {
+      final model = pb.authStore.model;
+      if (model is RecordModel) {
+        final user = model;
+        final onboardingDone = user.getBoolValue('onboarding_done');
+        if (!onboardingDone) {
+          return OnboardingScreen(
+            user: user,
+            onFinished: () {
+              setState(() {}); // neu bauen, danach HomeScreen
+            },
+          );
+        }
+      }
+      return const HomeScreen();
+    }
 
     return Scaffold(
       body: Center(
