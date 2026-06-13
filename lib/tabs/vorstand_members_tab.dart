@@ -427,6 +427,7 @@ class _VorstandMembersPermTabState extends State<VorstandMembersPermTab> {
   late int permMember;
   late int permKasse;
   late int permBooking;
+  late int permNews;
 
   @override
   void initState() {
@@ -436,9 +437,10 @@ class _VorstandMembersPermTabState extends State<VorstandMembersPermTab> {
     authTrainer = m.getBoolValue('auth_trainer');
     authAdmin = m.getBoolValue('auth_admin');
 
-    permMember = m.getIntValue('perm_vorstand_member');
-    permKasse = m.getIntValue('perm_vorstand_kasse');
-    permBooking = m.getIntValue('perm_vorstand_booking');
+    permMember = m.getIntValue('perm_board_member');
+    permKasse = m.getIntValue('perm_board_cash');
+    permBooking = m.getIntValue('perm_board_booking');
+    permNews = m.getIntValue('perm_board_news');
   }
 
   Future<void> _save() async {
@@ -446,9 +448,10 @@ class _VorstandMembersPermTabState extends State<VorstandMembersPermTab> {
       "auth_vorstand": authVorstand,
       "auth_trainer": authTrainer,
       "auth_admin": authAdmin,
-      "perm_vorstand_member": permMember,
-      "perm_vorstand_kasse": permKasse,
-      "perm_vorstand_booking": permBooking,
+      "perm_board_member": permMember,
+      "perm_board_cash": permKasse,
+      "perm_board_booking": permBooking,
+      "perm_board_news": permNews,
     };
 
     try {
@@ -584,6 +587,27 @@ class _VorstandMembersPermTabState extends State<VorstandMembersPermTab> {
                 ),
               ],
               onChanged: (v) => setState(() => permBooking = v ?? 0),
+            ),
+            const SizedBox(height: 16),
+            const Text("Aktuelles (News)"),
+            const SizedBox(height: 4),
+            DropdownButtonFormField<int>(
+              initialValue: permNews,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 0, child: Text("Kein Zugriff")),
+                DropdownMenuItem(
+                  value: 1,
+                  child: Text("Nur eigene News erstellen & bearbeiten"),
+                ),
+                DropdownMenuItem(
+                  value: 2,
+                  child: Text("Alle News bearbeiten & löschen"),
+                ),
+              ],
+              onChanged: (v) => setState(() => permNews = v ?? 0),
             ),
           ],
         ),

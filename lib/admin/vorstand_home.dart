@@ -6,7 +6,8 @@ import '../main.dart';
 import '../tabs/vorstand_dashboard_tab.dart';
 import '../tabs/vorstand_kasse_tab.dart';
 import '../tabs/vorstand_bookings_tab.dart';
-import '../tabs/vorstand_notifications_tab.dart'; // Neu: Mitteilungen statt Profil
+import '../tabs/vorstand_notifications_tab.dart';
+import '../tabs/vorstand_news_tab.dart';
 
 class VorstandHomeScreen extends StatefulWidget {
   const VorstandHomeScreen({super.key});
@@ -20,6 +21,7 @@ class _VorstandHomeScreenState extends State<VorstandHomeScreen> {
   int memberPerm = 0;
   int kassePerm = 0;
   int bookingPerm = 0;
+  int newsPerm = 0;
   bool _loadedPerms = false;
 
   @override
@@ -38,6 +40,7 @@ class _VorstandHomeScreenState extends State<VorstandHomeScreen> {
           memberPerm  = isAppAdmin ? 3 : user.getIntValue('perm_board_member');
           kassePerm   = isAppAdmin ? 3 : user.getIntValue('perm_board_cash');
           bookingPerm = isAppAdmin ? 3 : user.getIntValue('perm_board_booking');
+          newsPerm    = isAppAdmin ? 2 : user.getIntValue('perm_board_news');
 
           _loadedPerms = true;
         });
@@ -55,13 +58,14 @@ class _VorstandHomeScreenState extends State<VorstandHomeScreen> {
       );
     }
 
-    // Die Liste der Tabs (Profil wurde durch Notifications ersetzt)
+    // Die Liste der Tabs
     final tabs = [
       const VorstandDashboardTab(),
       VorstandMembersTab(permission: memberPerm),
       VorstandKasseTab(permission: kassePerm),
       VorstandBookingsTab(permission: bookingPerm),
-      const VorstandNotificationsTab(), // Hier werden die Anfragen angezeigt
+      VorstandNewsTab(permission: newsPerm),
+      const VorstandNotificationsTab(),
     ];
 
     // Steuerung der klickbaren Bereiche
@@ -73,7 +77,8 @@ class _VorstandHomeScreenState extends State<VorstandHomeScreen> {
       isAppAdmin || memberPerm > 0,   // Mitglieder nur bei Recht oder App-Admin
       isAppAdmin || kassePerm > 0,    // Kasse nur bei Recht oder App-Admin
       isAppAdmin || bookingPerm > 0,  // Buchungen nur bei Recht oder App-Admin
-      true,                        // Mitteilungen immer an
+      isAppAdmin || newsPerm > 0,     // News nur bei Recht oder App-Admin
+      true,                           // Mitteilungen immer an
     ];
 
     return Scaffold(
@@ -116,6 +121,10 @@ class _VorstandHomeScreenState extends State<VorstandHomeScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.event, color: bookingPerm > 0 ? null : Colors.grey.shade400),
             label: "Buchungen",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.newspaper, color: newsPerm > 0 ? null : Colors.grey.shade400),
+            label: "Aktuelles",
           ),
           const BottomNavigationBarItem(
             icon: Icon(Icons.notifications), 
