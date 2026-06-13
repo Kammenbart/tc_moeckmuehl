@@ -266,6 +266,80 @@ class _ProfileTabState extends State<ProfileTab> {
     );
   }
 
+  Future<void> _requestMembership() async {
+    final isMember = user.getBoolValue('membership');
+    final hasRequested = user.getBoolValue('membership_request');
+
+    if (isMember) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Du bist bereits Mitglied."),
+        ),
+      );
+      return;
+    }
+
+    final action = hasRequested ? "Anfrage zurückziehen" : "Mitgliedschaft anfordern";
+    final confirm = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(action),
+            content: Text(
+              hasRequested
+                  ? "Möchtest du deine Mitgliedschaftsanfrage zurückziehen?"
+                  : "Möchtest du eine Mitgliedschaft anfordern? Der Vorstand wird deine Anfrage überprüfen.",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text("Abbrechen"),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor:
+                      hasRequested ? Colors.red : Colors.green,
+                ),
+                child: Text(hasRequested ? "Zurückziehen" : "Anfordern"),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirm) return;
+
+    try {
+      await pb.collection('users').update(user.id, body: {
+        'membership_request': !hasRequested,
+      });
+
+      user = await pb.collection('users').getOne(user.id);
+
+      if (!mounted) return;
+      setState(() {});
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            hasRequested
+                ? "Anfrage zurückgezogen."
+                : "Mitgliedschaftsanfrage gestellt.",
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint("Fehler bei Mitgliedschaftsanfrage: $e");
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Fehler: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Avatar-URL berechnen
@@ -470,6 +544,79 @@ class _ProfileTabState extends State<ProfileTab> {
                       decoration: const InputDecoration(
                         labelText: "Kontoinhaber",
                         border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+
+                  const Divider(),
+
+                  // Mitgliedschaft
+                  sectionTitle("Mitgliedschaft"),
+                  Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Card(
+                      color: user.getBoolValue('membership')
+                          ? Colors.green.shade50
+                          : (user.getBoolValue('membership_request')
+                              ? Colors.orange.shade50
+                              : Colors.grey.shade100),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  user.getBoolValue('membership')
+                                      ? Icons.check_circle
+                                      : (user.getBoolValue('membership_request')
+                                          ? Icons.schedule
+                                          : Icons.block),
+                                  color: user.getBoolValue('membership')
+                                      ? Colors.green
+                                      : (user.getBoolValue('membership_request')
+                                          ? Colors.orange
+                                          : Colors.grey),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  user.getBoolValue('membership')
+                                      ? "Mitglied"
+                                      : (user.getBoolValue('membership_request')
+                                          ? "Anfrage ausstehend"
+                                          : "Kein Mitglied"),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                icon: Icon(user.getBoolValue('membership_request')
+                                    ? Icons.close
+                                    : Icons.person_add),
+                                label: Text(
+                                  user.getBoolValue('membership_request')
+                                      ? "Anfrage zurückziehen"
+                                      : "Mitgliedschaft anfordern",
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor:
+                                      user.getBoolValue('membership_request')
+                                          ? Colors.red
+                                          : appFrontColor.value,
+                                ),
+                                onPressed: _requestMembership,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),

@@ -8,6 +8,7 @@ import '../tabs/vorstand_kasse_tab.dart';
 import '../tabs/vorstand_bookings_tab.dart';
 import '../tabs/vorstand_notifications_tab.dart';
 import '../tabs/vorstand_news_tab.dart';
+import '../tabs/vorstand_membership_tab.dart';
 
 class VorstandHomeScreen extends StatefulWidget {
   const VorstandHomeScreen({super.key});
@@ -62,6 +63,7 @@ class _VorstandHomeScreenState extends State<VorstandHomeScreen> {
     final tabs = [
       const VorstandDashboardTab(),
       VorstandMembersTab(permission: memberPerm),
+      VorstandMembershipTab(permission: memberPerm),
       VorstandKasseTab(permission: kassePerm),
       VorstandBookingsTab(permission: bookingPerm),
       VorstandNewsTab(permission: newsPerm),
@@ -75,6 +77,7 @@ class _VorstandHomeScreenState extends State<VorstandHomeScreen> {
     final List<bool> enabled = [
       true,                        // Dashboard immer an
       isAppAdmin || memberPerm > 0,   // Mitglieder nur bei Recht oder App-Admin
+      isAppAdmin || memberPerm >= 3,  // Mitgliedschaften verwalten nur bei Recht >= 3
       isAppAdmin || kassePerm > 0,    // Kasse nur bei Recht oder App-Admin
       isAppAdmin || bookingPerm > 0,  // Buchungen nur bei Recht oder App-Admin
       isAppAdmin || newsPerm > 0,     // News nur bei Recht oder App-Admin
@@ -113,6 +116,10 @@ class _VorstandHomeScreenState extends State<VorstandHomeScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.group, color: memberPerm > 0 ? null : Colors.grey.shade400),
             label: "Mitglieder",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_add, color: memberPerm >= 3 ? null : Colors.grey.shade400),
+            label: "Bewerbungen",
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.account_balance_wallet, color: kassePerm > 0 ? null : Colors.grey.shade400),
