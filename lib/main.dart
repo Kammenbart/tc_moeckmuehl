@@ -3,6 +3,7 @@ import 'package:pocketbase/pocketbase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/date_symbol_data_local.dart'; // Für deutsches Datum
 import 'package:flutter_localizations/flutter_localizations.dart'; //für deutschen Kalender
+import 'dart:async';
 
 import 'tabs/home_tab.dart';
 import 'tabs/court_tab.dart';
@@ -60,35 +61,72 @@ void main() async {
   await initializeDateFormatting('de_DE', null);
 
   // SharedPreferences einmal laden
-  final prefs = await SharedPreferences.getInstance();
-
-  // PocketBase mit persistentem AuthStore initialisieren
-  pb = PocketBase(
-    'https://api.tc-moeckmuehl.de',
-    authStore: AsyncAuthStore(
-      save: (String data) async {
-        await prefs.setString('pb_auth', data);
-      },
-      // initial ist ein String? (keine Funktion!)
-      initial: prefs.getString('pb_auth'),
-      clear: () async {
-        await prefs.remove('pb_auth');
-      },
-    ),
-  );
-
-  // Optional: gespeicherte Session refreshen
+  late final SharedPreferences prefs;
   try {
-    await pb.collection('users').authRefresh();
-  } catch (_) {
-    // clear() gibt in deiner Version offenbar void zurück → NICHT awaiten
-    pb.authStore.clear();
+    prefs = await SharedPreferences.getInstance();
+  } catch (e) {
+    debugPrint("Fehler beim Laden von SharedPreferences: $e");
+    rethrow;
   }
 
-  // Globale Farben aus der settings-Collection laden
+  // PocketBase mit persistentem AuthStore initialisieren
   try {
-    final settings =
-        await pb.collection('settings').getOne(settingsRecordId);
+    pb = PocketBase(
+      'https://api.tc-moeckmuehl.de',
+      authStore: AsyncAuthStore(
+        save: (String data) async {
+          try {
+            await prefs.setString('pb_auth', data);
+          } catch (e) {
+            debugPrint("Fehler beim Speichern des Auth-Tokens: $e");
+          }
+        },
+        // initial ist ein String? (keine Funktion!)
+        initial: prefs.getString('pb_auth'),
+        clear: () async {
+          try {
+            await prefs.remove('pb_auth');
+          } catch (e) {
+            debugPrint("Fehler beim Löschen des Auth-Tokens: $e");
+          }
+        },
+      ),
+    );
+  } catch (e) {
+    debugPrint("Fehler bei PocketBase-Initialisierung: $e");
+    // Continue anyway - app kann offline laufen
+  }
+
+  // Optional: gespeicherte Session refreshen (mit Timeout)
+  try {
+    await pb.collection('users').authRefresh().timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        debugPrint("Session-Refresh Timeout");
+        throw TimeoutException('Auth refresh timed out');
+      },
+    );
+  } catch (e) {
+    debugPrint("Fehler beim Session-Refresh: $e");
+    try {
+      pb.authStore.clear();
+    } catch (e2) {
+      debugPrint("Fehler beim Löschen der Auth-Session: $e2");
+    }
+  }
+
+  // Globale Farben aus der settings-Collection laden (mit Timeout)
+  try {
+    final settings = await pb
+        .collection('settings')
+        .getOne(settingsRecordId)
+        .timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            debugPrint("Settings-Abfrage Timeout");
+            throw TimeoutException('Settings fetch timed out');
+          },
+        );
 
     appBackColor.value = colorFromHex(
         settings.getStringValue('app_colour_back'), Colors.white);
@@ -101,7 +139,8 @@ void main() async {
         settings.getStringValue('court_color_other'), Colors.red);
     eventBookingColor.value = colorFromHex(
         settings.getStringValue('court_color_event'), Colors.purple);
-  } catch (_) {
+  } catch (e) {
+    debugPrint("Fehler beim Laden der Farben: $e");
     // Falls Laden fehlschlägt, bleiben die Standardfarben
   }
 
