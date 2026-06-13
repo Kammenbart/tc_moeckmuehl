@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pocketbase/pocketbase.dart';
 
 import '../main.dart';
+import '../services/member_csv_service.dart';
 
 /// (Optional) alter Dialog – wird aktuell nicht benutzt, kann später gelöscht werden.
 Future<void> showMemberEditDialog(
@@ -327,6 +328,45 @@ class _VorstandMembersTabState extends State<VorstandMembersTab> {
 
     // 4. Normale Ansicht
     return Scaffold(
+      appBar: AppBar(
+        title: const Text("Mitglieder"),
+        actions: canWrite
+            ? [
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'export') {
+                      MemberCsvImportExport.exportMembersToCSV(context);
+                    } else if (value == 'import') {
+                      MemberCsvImportExport.importMembersFromCSV(context)
+                          .then((_) => _loadData());
+                    }
+                  },
+                  itemBuilder: (BuildContext context) => [
+                    const PopupMenuItem(
+                      value: 'import',
+                      child: Row(
+                        children: [
+                          Icon(Icons.upload, size: 20),
+                          SizedBox(width: 8),
+                          Text('CSV importieren'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'export',
+                      child: Row(
+                        children: [
+                          Icon(Icons.download, size: 20),
+                          SizedBox(width: 8),
+                          Text('CSV exportieren'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ]
+            : null,
+      ),
       body: Column(
         children: [
           Padding(

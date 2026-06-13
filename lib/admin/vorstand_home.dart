@@ -9,6 +9,7 @@ import '../tabs/vorstand_bookings_tab.dart';
 import '../tabs/vorstand_notifications_tab.dart';
 import '../tabs/vorstand_news_tab.dart';
 import '../tabs/vorstand_membership_tab.dart';
+import '../tabs/vorstand_invoice_tab.dart';
 
 class VorstandHomeScreen extends StatefulWidget {
   const VorstandHomeScreen({super.key});
@@ -65,6 +66,7 @@ class _VorstandHomeScreenState extends State<VorstandHomeScreen> {
       VorstandMembersTab(permission: memberPerm),
       VorstandMembershipTab(permission: memberPerm),
       VorstandKasseTab(permission: kassePerm),
+      VorstandInvoiceTab(permission: kassePerm),
       VorstandBookingsTab(permission: bookingPerm),
       VorstandNewsTab(permission: newsPerm),
       const VorstandNotificationsTab(),
@@ -79,6 +81,7 @@ class _VorstandHomeScreenState extends State<VorstandHomeScreen> {
       isAppAdmin || memberPerm > 0,   // Mitglieder nur bei Recht oder App-Admin
       isAppAdmin || memberPerm >= 3,  // Mitgliedschaften verwalten nur bei Recht >= 3
       isAppAdmin || kassePerm > 0,    // Kasse nur bei Recht oder App-Admin
+      isAppAdmin || kassePerm > 0,    // Rechnungen nur bei Kasse-Recht
       isAppAdmin || bookingPerm > 0,  // Buchungen nur bei Recht oder App-Admin
       isAppAdmin || newsPerm > 0,     // News nur bei Recht oder App-Admin
       true,                           // Mitteilungen immer an
@@ -124,6 +127,10 @@ class _VorstandHomeScreenState extends State<VorstandHomeScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.account_balance_wallet, color: kassePerm > 0 ? null : Colors.grey.shade400),
             label: "Kasse",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.receipt, color: kassePerm > 0 ? null : Colors.grey.shade400),
+            label: "Rechnungen",
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.event, color: bookingPerm > 0 ? null : Colors.grey.shade400),

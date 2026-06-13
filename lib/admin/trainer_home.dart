@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../main.dart';
-import '../tabs/trainer_dashboard_tab.dart';
-import '../tabs/trainer_training_tab.dart';
-import '../tabs/trainer_invoice_tab.dart';
-import '../tabs/trainer_dunning_tab.dart';
-import '../tabs/profile_tab.dart';
+import '../tabs/trainer_customers_tab.dart';
+import '../tabs/trainer_groups_tab.dart';
+import '../tabs/trainer_services_tab.dart';
+import '../tabs/trainer_invoices_tab.dart';
+import '../tabs/trainer_reminders_tab.dart';
 
 class TrainerHomeScreen extends StatefulWidget {
   const TrainerHomeScreen({super.key});
@@ -26,16 +26,11 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
       body: IndexedStack(
         index: _index,
         children: [
-          const TrainerDashboardTab(),
-          const TrainerTrainingTab(),
-          const TrainerInvoiceTab(),
-          const TrainerDunningTab(),
-          ProfileTab(
-            onLogout: () {
-              pb.authStore.clear();
-              Navigator.of(context).popUntil((route) => route.isFirst);
-            },
-          ),
+          const TrainerCustomersTab(),
+          const TrainerGroupsTab(),
+          const TrainerServicesTab(),
+          const TrainerInvoicesTab(),
+          const TrainerRemindersTab(),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -45,10 +40,11 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
         selectedItemColor: appFrontColor.value,
         unselectedItemColor: Colors.grey,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: "Dashboard"),
-          BottomNavigationBarItem(icon: Icon(Icons.fitness_center), label: "Training"),
-          BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: "Rechnung"),
-          BottomNavigationBarItem(icon: Icon(Icons.warning), label: "Mahnung"),
+          BottomNavigationBarItem(icon: Icon(Icons.people), label: "Kundenstamm"),
+          BottomNavigationBarItem(icon: Icon(Icons.groups), label: "Gruppen"),
+          BottomNavigationBarItem(icon: Icon(Icons.list), label: "Leistungen"),
+          BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: "Rechnungen"),
+          BottomNavigationBarItem(icon: Icon(Icons.warning), label: "Mahnungen"),
         ],
       ),
     );
