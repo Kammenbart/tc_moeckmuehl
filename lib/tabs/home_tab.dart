@@ -15,7 +15,8 @@ class HomeTab extends StatefulWidget {
 
 class _HomeTabState extends State<HomeTab> {
   List<RecordModel> news = [];
-  List<RecordModel> myBookings = [];
+  List<RecordModel> allBookings = []; // Alle Buchungen, nicht nur eigene
+  List<RecordModel> futureBookings = []; // Gefiltert nach Zeit
   bool isLoading = true;
 
   @override
@@ -35,17 +36,20 @@ class _HomeTabState extends State<HomeTab> {
           .collection('news')
           .getList(page: 1, perPage: 10, sort: '-created');
 
-      // Eigene Buchungen laden
+      // ALLE Buchungen laden (nicht nur eigene), die in der Zukunft liegen
       final bookingRes = await pb.collection('bookings').getFullList(
-        filter: 'user = "${pb.authStore.record!.id}" && start_time >= "$now"',
+        filter: 'start_time >= "$now"',
         sort: 'start_time',
-        expand: 'court',
+        expand: 'court,user',
       );
+
+      // Sortiere und filtere die Buchungen
+      _processFutureBookings(bookingRes);
 
       if (mounted) {
         setState(() {
           news = newsRes.items;
-          myBookings = bookingRes;
+          allBookings = bookingRes;
         });
       }
     } catch (e) {
@@ -53,6 +57,46 @@ class _HomeTabState extends State<HomeTab> {
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
+  }
+
+  void _processFutureBookings(List<RecordModel> bookings) {
+    final now = DateTime.now();
+    final List<RecordModel> future = [];
+
+    for (var booking in bookings) {
+      final start = DateTime.parse(booking.getStringValue('start_time')).toLocal();
+      final end = DateTime.parse(booking.getStringValue('end_time')).toLocal();
+
+      // Zeige nur Buchungen, die noch nicht vorbei sind
+      if (end.isAfter(now)) {
+        future.add(booking);
+      }
+    }
+
+    // Sortiere nach Start-Zeit
+    future.sort((a, b) {
+      final timeA = DateTime.parse(a.getStringValue('start_time'));
+      final timeB = DateTime.parse(b.getStringValue('start_time'));
+      return timeA.compareTo(timeB);
+    });
+
+    setState(() => futureBookings = future);
+  }
+
+  bool _isCurrentlyActive(RecordModel booking) {
+    final now = DateTime.now();
+    final start = DateTime.parse(booking.getStringValue('start_time')).toLocal();
+    final end = DateTime.parse(booking.getStringValue('end_time')).toLocal();
+
+    return now.isAfter(start) && now.isBefore(end);
+  }
+
+  bool _startsWithinOneHour(RecordModel booking) {
+    final now = DateTime.now();
+    final start = DateTime.parse(booking.getStringValue('start_time')).toLocal();
+    final inOneHour = now.add(const Duration(hours: 1));
+
+    return start.isAfter(now) && start.isBefore(inOneHour);
   }
 
   @override
@@ -67,7 +111,7 @@ Widget build(BuildContext context) {
       iban.isEmpty || bic.isEmpty || bankName.isEmpty;
 
   final hasNews = news.isNotEmpty;
-  final hasBookings = myBookings.isNotEmpty;
+  final hasBookings = futureBookings.isNotEmpty;
 
   return Scaffold(
     appBar: AppBar(title: const Text("TC Möckmühl")),
@@ -286,7 +330,7 @@ Widget build(BuildContext context) {
                 // Meine Termine – gleiche hellgraue Box, max. 4
                 if (hasBookings) ...[
                   const Text(
-                    "Meine Termine",
+                    "Kommende Termine",
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -301,14 +345,36 @@ Widget build(BuildContext context) {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 8, vertical: 8),
                     child: Column(
-                      children: myBookings.take(4).map((b) {
+                      children: futureBookings.take(4).map((b) {
                         final start = DateTime.parse(
                                 b.getStringValue('start_time'))
+                            .toLocal();
+                        final end = DateTime.parse(
+                                b.getStringValue('end_time'))
                             .toLocal();
                         final court = b
                                 .expand['court']?[0]
                                 .getStringValue('name') ??
                             "Platz";
+                        final user = b.expand['user']?[0];
+                        final userName = user != null
+                            ? "${user.getStringValue('forename')} ${user.getStringValue('surname')}"
+                            : "Gast";
+
+                        final isActive = _isCurrentlyActive(b);
+                        final startsInOneHour = _startsWithinOneHour(b);
+                        final isOwnBooking =
+                            b.getStringValue('user') == pb.authStore.record!.id;
+
+                        Color backgroundColor = appFrontColor.value
+                            .withValues(alpha: 0.1);
+                        if (isActive) {
+                          backgroundColor =
+                              Colors.green.withValues(alpha: 0.2);
+                        } else if (startsInOneHour) {
+                          backgroundColor =
+                              Colors.orange.withValues(alpha: 0.2);
+                        }
 
                         return Card(
                           margin:
@@ -316,15 +382,58 @@ Widget build(BuildContext context) {
                           elevation: 0,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
+                            side: BorderSide(
+                              color: isActive
+                                  ? Colors.green
+                                  : (startsInOneHour
+                                      ? Colors.orange
+                                      : Colors.transparent),
+                              width: isActive || startsInOneHour ? 2 : 0,
+                            ),
                           ),
-                          color: appFrontColor.value
-                              .withValues(alpha: 0.1),
+                          color: backgroundColor,
                           child: ListTile(
-                            leading: const Icon(Icons.calendar_today),
+                            leading: Icon(
+                              Icons.calendar_today,
+                              color: isActive
+                                  ? Colors.green
+                                  : (startsInOneHour
+                                      ? Colors.orange
+                                      : null),
+                            ),
                             title: Text(
-                                "$court - ${DateFormat('dd.MM.').format(start)}"),
-                            subtitle: Text(
-                              "${DateFormat('HH:mm').format(start)} Uhr",
+                              "$court - ${DateFormat('dd.MM.').format(start)}",
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "${DateFormat('HH:mm').format(start)} - ${DateFormat('HH:mm').format(end)} Uhr",
+                                ),
+                                if (!isOwnBooking)
+                                  Text(
+                                    userName,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                if (isActive)
+                                  const Text(
+                                    "🔴 Läuft gerade",
+                                    style: TextStyle(
+                                      color: Colors.green,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  )
+                                else if (startsInOneHour)
+                                  const Text(
+                                    "⏰ Startet in Kürze",
+                                    style: TextStyle(
+                                      color: Colors.orange,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                              ],
                             ),
                             trailing: const Icon(
                               Icons.arrow_forward_ios,
