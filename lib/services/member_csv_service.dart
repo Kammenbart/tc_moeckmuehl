@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:pocketbase/pocketbase.dart';
-import 'package:csv/csv.dart';
+// pocketbase is available globally via ../main.dart (no direct import needed here)
 import 'package:file_picker/file_picker.dart';
 import '../main.dart';
 import 'dart:convert';
@@ -50,19 +49,18 @@ class MemberCsvImportExport {
         ]);
       }
 
-      // Convert to CSV string
-      String csv = const ListToCsvConverter().convert(csvData);
+      // Convert to CSV string using local helper (avoid package API mismatch)
+      String csv = _convertToCsv(csvData);
 
-      // Save to file (using path_provider)
-      final fileName = 'Mitglieder_${DateTime.now().toString().split(' ')[0]}.csv';
-      final fileContent = utf8.encode(csv);
+      // Save to temp file
+      final fileName = 'Mitglieder_${DateTime.now().toIso8601String().split('T').first}.csv';
+      final outFile = File('${Directory.systemTemp.path}/$fileName');
+      await outFile.writeAsString(csv, encoding: utf8);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'CSV erstellt: $fileName\n${members.length} Mitglieder exportiert',
-            ),
+            content: Text('CSV erstellt: $fileName — ${members.length} Mitglieder exportiert'),
           ),
         );
       }
@@ -93,9 +91,8 @@ class MemberCsvImportExport {
       final file = File(result.files.single.path!);
       final contents = await file.readAsString(encoding: utf8);
 
-      // Parse CSV
-      List<List<dynamic>> csvTable =
-          const CsvToListConverter().convert(contents);
+        // Parse CSV using local helper (robust for quoted fields)
+        List<List<dynamic>> csvTable = _parseCsv(contents);
 
       if (csvTable.isEmpty) {
         if (context.mounted) {
@@ -242,6 +239,66 @@ class MemberCsvImportExport {
       return chars[(DateTime.now().microsecond + index) % chars.length];
     });
     return random.join();
+  }
+
+  // Simple CSV converter (handles quoting of fields containing commas/newlines/quotes)
+  static String _convertToCsv(List<List<dynamic>> rows) {
+    String escapeField(String s) {
+      final needQuote = s.contains(',') || s.contains('\n') || s.contains('"') || s.contains('\r');
+      var out = s.replaceAll('"', '""');
+      if (needQuote) out = '"$out"';
+      return out;
+    }
+
+    return rows.map((r) => r.map((c) => escapeField(c?.toString() ?? '')).join(',')).join('\n');
+  }
+
+  // Simple CSV parser supporting quoted fields and escaped quotes
+  static List<List<dynamic>> _parseCsv(String input) {
+    final List<List<dynamic>> rows = [];
+    List<String> row = [];
+    final StringBuffer field = StringBuffer();
+    bool inQuotes = false;
+
+    for (int i = 0; i < input.length; i++) {
+      final ch = input[i];
+      if (inQuotes) {
+        if (ch == '"') {
+          if (i + 1 < input.length && input[i + 1] == '"') {
+            field.write('"');
+            i++; // skip escaped quote
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          field.write(ch);
+        }
+      } else {
+        if (ch == '"') {
+          inQuotes = true;
+        } else if (ch == ',') {
+          row.add(field.toString());
+          field.clear();
+        } else if (ch == '\r') {
+          // ignore
+        } else if (ch == '\n') {
+          row.add(field.toString());
+          field.clear();
+          rows.add(row);
+          row = [];
+        } else {
+          field.write(ch);
+        }
+      }
+    }
+
+    // add last field/row
+    if (inQuotes) {
+      // unterminated quoted field, still add
+    }
+    row.add(field.toString());
+    rows.add(row);
+    return rows;
   }
 
   /// Send welcome emails to new members

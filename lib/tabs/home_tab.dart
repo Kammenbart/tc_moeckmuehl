@@ -64,7 +64,6 @@ class _HomeTabState extends State<HomeTab> {
     final List<RecordModel> future = [];
 
     for (var booking in bookings) {
-      final start = DateTime.parse(booking.getStringValue('start_time')).toLocal();
       final end = DateTime.parse(booking.getStringValue('end_time')).toLocal();
 
       // Zeige nur Buchungen, die noch nicht vorbei sind

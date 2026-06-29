@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:pocketbase/pocketbase.dart';
-import 'package:intl/intl.dart';
 import '../main.dart';
 
 class TrainerCustomersTab extends StatefulWidget {

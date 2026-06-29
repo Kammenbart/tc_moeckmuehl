@@ -1,3 +1,4 @@
+// ignore_for_file: use_build_context_synchronously
 import 'package:flutter/material.dart';
 import 'package:pocketbase/pocketbase.dart';
 import 'package:intl/intl.dart';
@@ -19,9 +20,7 @@ class _AboTerm {
   _AboTerm({
     required this.start,
     required this.end,
-    this.isAvailable = true,
-    this.selected = true,
-  });
+  }) : isAvailable = true, selected = true;
 }
 
 class _CourtTabState extends State<CourtTab> {
@@ -108,6 +107,7 @@ class _CourtTabState extends State<CourtTab> {
           ],
         ),
       );
+      if (!mounted) return;
       return;
     }
 
@@ -155,6 +155,7 @@ class _CourtTabState extends State<CourtTab> {
         ],
       ),
     );
+    if (!mounted) return;
   }
 
   Future<void> _editSingleBooking(RecordModel booking) async {
@@ -164,7 +165,7 @@ class _CourtTabState extends State<CourtTab> {
 
   // Grunddaten aus Booking
   final courtId = booking.getStringValue('court');
-  final courtExpand = booking.expand['court'] as List<RecordModel>?;
+  final courtExpand = booking.expand['court'];
   final courtName = (courtExpand != null && courtExpand.isNotEmpty)
       ? courtExpand.first.getStringValue('name')
       : 'Platz';
@@ -311,7 +312,7 @@ class _CourtTabState extends State<CourtTab> {
               const SizedBox(height: 10),
               if (canSetEventType)
                 DropdownButtonFormField<String>(
-                  value: eventType.isEmpty ? null : eventType,
+                  initialValue: eventType.isEmpty ? null : eventType,
                   decoration: const InputDecoration(
                     labelText: "Ligaspiel / Turnier",
                     border: OutlineInputBorder(),
@@ -411,6 +412,7 @@ class _CourtTabState extends State<CourtTab> {
                 final hasOverlap = existing.isNotEmpty;
 
                 if (hasOverlap) {
+                  if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text(
@@ -641,7 +643,7 @@ Future<void> _editAboBooking(RecordModel booking) async {
                 const SizedBox(height: 10),
                 if (canSetEventType)
                   DropdownButtonFormField<String>(
-                    value: eventType.isEmpty ? null : eventType,
+                    initialValue: eventType.isEmpty ? null : eventType,
                     decoration: const InputDecoration(
                       labelText: "Ligaspiel / Turnier",
                       border: OutlineInputBorder(),
@@ -1955,7 +1957,6 @@ void _showSuccessDialog(String courtName, DateTime date, int weeks) {
     final List<dynamic> playerIds = booking.getListValue('players');
     final bool isOwner = booking.getStringValue('user') == currentUserId;
     final bool isPlayer = playerIds.contains(currentUserId);
-    final bool canCancel = isOwner || isPlayer;
     final String guestNames = booking.getStringValue('guests');
     final bool isAbo = booking.getStringValue('abo').isNotEmpty;
 
