@@ -167,7 +167,7 @@ class _VorstandNewsTabState extends State<VorstandNewsTab> {
                 contentController.text,
               );
             },
-            child: const Text(isEdit ? "Speichern" : "Erstellen"),
+            child: Text(isEdit ? "Speichern" : "Erstellen"),
           ),
         ],
       ),

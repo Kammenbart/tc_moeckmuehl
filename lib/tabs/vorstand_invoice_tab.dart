@@ -32,7 +32,7 @@ class _VorstandInvoiceTabState extends State<VorstandInvoiceTab> {
       final user = pb.authStore.record as RecordModel;
       final isAppAdmin = user.getBoolValue('auth_admin_app');
 
-      if (permission == 1 && !isAppAdmin) {
+      if (widget.permission == 1 && !isAppAdmin) {
         // Users can only see their own invoices
         filter = 'submitted_by = "${user.id}"';
       }
@@ -349,11 +349,11 @@ class _VorstandInvoiceTabState extends State<VorstandInvoiceTab> {
     final user = pb.authStore.record as RecordModel;
     final isAppAdmin = user.getBoolValue('auth_admin_app');
     final canSubmit =
-        permission >= 1 || isAppAdmin;
+        widget.permission >= 1 || isAppAdmin;
     final canApprove =
-        permission >= 2 || isAppAdmin;
+        widget.permission >= 2 || isAppAdmin;
     final canManage =
-        permission >= 3 || isAppAdmin;
+        widget.permission >= 3 || isAppAdmin;
 
     if (!canSubmit && !canApprove && !canManage) {
       return const Scaffold(

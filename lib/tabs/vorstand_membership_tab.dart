@@ -199,7 +199,7 @@ class _VorstandMembershipTabState extends State<VorstandMembershipTab> {
     final user = pb.authStore.record as RecordModel;
     final isAppAdmin = user.getBoolValue('auth_admin_app');
     final canManageMembership =
-        isAppAdmin || (permission >= 3 || permission >= 4); // permission level 3+ for management
+        isAppAdmin || (widget.permission >= 3 || widget.permission >= 4); // permission level 3+ for management
 
     if (!canManageMembership) {
       return const Scaffold(
@@ -298,7 +298,7 @@ class _VorstandMembershipTabState extends State<VorstandMembershipTab> {
                                       vertical: 6,
                                     ),
                                     child: ListTile(
-                                      leading: const Icon(Icons.person_check,
+                                      leading: const Icon(Icons.verified,
                                           color: Colors.green),
                                       title: Text(
                                         "${member.getStringValue('forename')} ${member.getStringValue('surname')}",
