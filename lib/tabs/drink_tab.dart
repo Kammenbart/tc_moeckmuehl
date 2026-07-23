@@ -3,6 +3,7 @@ import 'package:pocketbase/pocketbase.dart';
 import 'package:intl/intl.dart';
 
 import '../main.dart';
+import '../services/notification_workflow_service.dart';
 
 class DrinkTab extends StatelessWidget {
   const DrinkTab({super.key});
@@ -366,6 +367,8 @@ class DrinkHistoryView extends StatefulWidget {
 
 class _DrinkHistoryViewState extends State<DrinkHistoryView> {
   List<RecordModel> orders = [];
+  final Map<String, RecordModel> _cancelRequestsByOrderId = {};
+  List<RecordModel> _recentCancelDecisions = [];
   bool loading = true;
 
   @override
@@ -384,8 +387,67 @@ class _DrinkHistoryViewState extends State<DrinkHistoryView> {
             expand: 'beverage',
             sort: '-created',
           );
+
+      final orderIds = res.map((o) => o.id).toSet();
+      final mapped = <String, RecordModel>{};
+      final decisions = <String, RecordModel>{};
+
+      // Notification-Infos sind optional. Falls Zugriffsregel/Filter fehlschlägt,
+      // bleibt die Getränkeliste trotzdem sichtbar.
+      try {
+        final notifications = await pb.collection('notifications').getFullList(
+              filter: 'action_type = "beverage_cancel"',
+              sort: '-created',
+            );
+
+        for (final n in notifications) {
+          final rawTarget = n.getStringValue('action_target').trim();
+          String targetOrderId = '';
+          if (rawTarget.contains('/')) {
+            final parts = rawTarget.split('/');
+            if (parts.length >= 2) {
+              targetOrderId = parts.sublist(1).join('/').trim();
+            }
+          } else if (rawTarget.contains(':')) {
+            targetOrderId = rawTarget.split(':').last.trim();
+          } else {
+            targetOrderId = rawTarget;
+          }
+
+          if (targetOrderId.isEmpty || !orderIds.contains(targetOrderId)) {
+            if (targetOrderId.isNotEmpty) {
+              decisions.putIfAbsent(targetOrderId, () => n);
+            }
+            continue;
+          }
+
+          mapped.putIfAbsent(targetOrderId, () => n);
+          decisions.putIfAbsent(targetOrderId, () => n);
+        }
+      } catch (e) {
+        debugPrint('Optionales Laden der Storno-Notifications fehlgeschlagen: $e');
+      }
+
+      final recentResolved = decisions.values
+          .where((n) {
+            final state = n.getStringValue('state').trim();
+            return state == 'enabled' || state == 'disabled';
+          })
+          .toList()
+        ..sort((a, b) {
+          final aDate = DateTime.tryParse(a.getStringValue('created'));
+          final bDate = DateTime.tryParse(b.getStringValue('created'));
+          return (bDate ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(
+            aDate ?? DateTime.fromMillisecondsSinceEpoch(0),
+          );
+        });
+
       setState(() {
         orders = res;
+        _cancelRequestsByOrderId
+          ..clear()
+          ..addAll(mapped);
+        _recentCancelDecisions = recentResolved.take(5).toList();
         loading = false;
       });
     } catch (e) {
@@ -428,6 +490,40 @@ class _DrinkHistoryViewState extends State<DrinkHistoryView> {
 
     return Column(
       children: [
+        if (_recentCancelDecisions.isNotEmpty)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Zuletzt entschiedene Storno-Anfragen',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 6),
+                ..._recentCancelDecisions.map((n) {
+                  final state = n.getStringValue('state').trim();
+                  final title = n.getStringValue('title');
+                  final color =
+                      state == 'enabled' ? Colors.green : Colors.red;
+                  final status = state == 'enabled' ? 'Genehmigt' : 'Abgelehnt';
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      '$status: ${title.isEmpty ? 'Storno-Anfrage' : title}',
+                      style: TextStyle(color: color, fontSize: 12),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
         Expanded(
           child: ListView.builder(
             itemCount: orders.length,
@@ -455,6 +551,14 @@ class _DrinkHistoryViewState extends State<DrinkHistoryView> {
                       const Duration(minutes: 5);
               final cancelRequested =
                   o.getBoolValue('cancel_requested');
+                final cancelNotification = _cancelRequestsByOrderId[o.id];
+                final cancelState =
+                  cancelNotification?.getStringValue('state').trim() ?? '';
+                final cancelDecisionState =
+                  cancelNotification?.getStringValue('decision_state').trim() ??
+                  '';
+                final hasPendingCancelRequest =
+                  cancelRequested && cancelState.isEmpty;
 
               final lineTotal = price * count;
 
@@ -469,12 +573,25 @@ class _DrinkHistoryViewState extends State<DrinkHistoryView> {
                         "${count}x à ${price.toStringAsFixed(2)} € = ${lineTotal.toStringAsFixed(2)} €",
                         style: const TextStyle(fontSize: 13),
                       ),
-                      if (cancelRequested)
-                        const Text(
-                          "Stornierung angefragt",
+                      if (cancelRequested || cancelState.isNotEmpty)
+                        Text(
+                          hasPendingCancelRequest
+                              ? "Stornierung angefragt (ausstehend)"
+                              : (cancelState == 'disabled'
+                                    ? "Storno-Anfrage abgelehnt"
+                                    : (cancelState == 'enabled'
+                                          ? "Storno-Anfrage genehmigt"
+                                          : "Storno-Status: $cancelDecisionState")),
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.orange,
+                            color: hasPendingCancelRequest
+                                ? Colors.orange
+                                : (cancelState == 'enabled'
+                                      ? Colors.green
+                                      : (cancelState == 'disabled'
+                                            ? Colors.red
+                                            : Colors.grey)),
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                     ],
@@ -502,18 +619,33 @@ class _DrinkHistoryViewState extends State<DrinkHistoryView> {
                                   .collection('beverage_orders')
                                   .delete(o.id);
 
-                              // Notification für direkte Stornierung
-                              await pb.collection('notifications').create(body: {
-                                "message":
-                                    "Artikel $articleName wurde von $personName am $dateStr storniert.",
-                                "category": "info",
-                                "priority": "normal",
-                                "scope": "vorstand_beverages",
-                              });
+                              // Notification ist optional und darf die eigentliche
+                              // Stornierung nicht blockieren.
+                              try {
+                                await pb.collection('notifications').create(body: {
+                                  "title": "Getränkestorno (direkt)",
+                                  "message":
+                                      "Artikel $articleName wurde von $personName am $dateStr storniert.",
+                                  "category": "info",
+                                  "priority": "normal",
+                                  "scope": "auth_admin_board",
+                                  "decision_state": "applied",
+                                });
+                              } catch (notifyError) {
+                                debugPrint(
+                                  'Info-Notification nach Direktstorno fehlgeschlagen: $notifyError',
+                                );
+                              }
 
                               setState(() {
                                 orders.removeAt(i);
                               });
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Getränkebuchung storniert.'),
+                                ),
+                              );
                             } catch (e) {
                               if (!mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -529,6 +661,39 @@ class _DrinkHistoryViewState extends State<DrinkHistoryView> {
                           ),
                           child: const Text("Stornieren"),
                         )
+                    else if (hasPendingCancelRequest)
+                      TextButton(
+                        onPressed: () async {
+                          try {
+                            await pb.collection('beverage_orders').update(
+                              o.id,
+                              body: {'cancel_requested': false},
+                            );
+
+                            if (cancelNotification != null) {
+                              await pb
+                                  .collection('notifications')
+                                  .delete(cancelNotification.id);
+                            }
+
+                            await _load();
+                          } catch (e) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Zurueckziehen fehlgeschlagen: $e',
+                                ),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.orange.shade800,
+                        ),
+                        child: const Text("Anfrage zurückziehen"),
+                      )
                     else if (!cancelRequested)
                       TextButton(
                         onPressed: () async {
@@ -547,14 +712,13 @@ class _DrinkHistoryViewState extends State<DrinkHistoryView> {
                                 "cancel_requested": true,
                               },
                             );
-                            // Notification für Storno-Anfrage
-                            await pb.collection('notifications').create(body: {
-                              "message":
-                                  "Für Artikel $articleName wurde von $personName am $dateStr eine Stornierung angefragt.",
-                              "category": "action_required",
-                              "priority": "normal",
-                              "scope": "vorstand_beverages",
-                            });
+                            await NotificationWorkflowService
+                                .createBeverageCancelRequest(
+                              orderId: o.id,
+                              articleName: articleName,
+                              requesterName: personName,
+                              dateLabel: dateStr,
+                            );
                             await _load(); // Liste neu laden
                           } catch (e) {
                             if (!mounted) return;

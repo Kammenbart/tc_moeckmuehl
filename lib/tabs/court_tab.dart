@@ -204,10 +204,13 @@ class _CourtTabState extends State<CourtTab> {
     builder: (context) => StatefulBuilder(
       builder: (context, setDialogState) => AlertDialog(
         title: Text("Buchung bearbeiten – $courtName"),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+        content: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+          child: Scrollbar(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
               // Start / Ende
               Row(
                 children: [
@@ -326,7 +329,9 @@ class _CourtTabState extends State<CourtTab> {
                   ],
                   onChanged: (v) => setDialogState(() => eventType = v ?? ''),
                 ),
-            ],
+              ],
+            ),
+            ),
           ),
         ),
         actions: [
@@ -533,10 +538,13 @@ Future<void> _editAboBooking(RecordModel booking) async {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: Text("Abo-Termin bearbeiten – $courtName"),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+          content: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+            child: Scrollbar(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                 // Start / Ende
                 Row(
                   children: [
@@ -668,6 +676,8 @@ Future<void> _editAboBooking(RecordModel booking) async {
                 ),
               ],
             ),
+            ),
+          ),
           ),
           actions: [
             TextButton(
@@ -1904,8 +1914,11 @@ void _showSuccessDialog(String courtName, DateTime date, int weeks) {
           final filteredUsers = users.where((u) {
             final isMe = u.id == currentUserId;
             final isAlreadySelected = alreadySelected.any((s) => s.id == u.id);
-            final matchesSearch = u.getStringValue('surname').toLowerCase().contains(searchQuery.toLowerCase());
-            return !isMe && !isAlreadySelected && matchesSearch;
+            final isMember = u.getBoolValue('membership');
+            final fullName =
+                '${u.getStringValue('forename')} ${u.getStringValue('surname')}'.trim();
+            final matchesSearch = fullName.toLowerCase().contains(searchQuery.toLowerCase());
+            return isMember && !isMe && !isAlreadySelected && matchesSearch;
           }).toList();
           return Container(
             height: MediaQuery.of(context).size.height * 0.7,
@@ -1924,14 +1937,19 @@ void _showSuccessDialog(String courtName, DateTime date, int weeks) {
                 Expanded(
                   child: ListView.builder(
                     itemCount: filteredUsers.length,
-                    itemBuilder: (context, i) => ListTile(
-                      leading: const Icon(Icons.person),
-                      title: Text(filteredUsers[i].getStringValue('surname')),
-                      onTap: () {
-                        onPick(filteredUsers[i]);
-                        Navigator.pop(context);
-                      },
-                    ),
+                    itemBuilder: (context, i) {
+                      final userRecord = filteredUsers[i];
+                      final fullName =
+                          '${userRecord.getStringValue('forename')} ${userRecord.getStringValue('surname')}'.trim();
+                      return ListTile(
+                        leading: const Icon(Icons.person),
+                        title: Text(fullName),
+                        onTap: () {
+                          onPick(userRecord);
+                          Navigator.pop(context);
+                        },
+                      );
+                    },
                   ),
                 ),
               ],

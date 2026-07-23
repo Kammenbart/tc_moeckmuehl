@@ -1,16 +1,27 @@
 import 'package:flutter/material.dart';
 // pocketbase is available globally via ../main.dart (no direct import needed here)
 import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import '../main.dart';
 import 'dart:convert';
 import 'dart:io';
 
+enum MemberCsvExportType { members, appUsers }
+
 class MemberCsvImportExport {
   /// Export members to CSV
-  static Future<void> exportMembersToCSV(BuildContext context) async {
+  static Future<void> exportMembersToCSV(
+    BuildContext context,
+    MemberCsvExportType exportType,
+  ) async {
     try {
-      // Load all members
-      final members = await pb.collection('users').getFullList();
+      // Load members or app users
+      final filter = exportType == MemberCsvExportType.members
+          ? 'membership = true'
+          : null;
+      final members = await pb
+          .collection('users')
+          .getFullList(filter: filter, sort: 'surname');
 
       // Prepare CSV data
       List<List<dynamic>> csvData = [
@@ -27,8 +38,8 @@ class MemberCsvImportExport {
           'Kontoinhaber',
           'Mitgliedsnummer',
           'Mitglied',
-          'Mitgliedschaftsanfrage'
-        ]
+          'Mitgliedschaftsanfrage',
+        ],
       ];
 
       // Data rows
@@ -51,16 +62,52 @@ class MemberCsvImportExport {
 
       // Convert to CSV string using local helper (avoid package API mismatch)
       String csv = _convertToCsv(csvData);
+      final fileName = exportType == MemberCsvExportType.members
+          ? 'Mitglieder_${DateTime.now().toIso8601String().split('T').first}.csv'
+          : 'AppNutzer_${DateTime.now().toIso8601String().split('T').first}.csv';
 
-      // Save to temp file
-      final fileName = 'Mitglieder_${DateTime.now().toIso8601String().split('T').first}.csv';
-      final outFile = File('${Directory.systemTemp.path}/$fileName');
+      String? savePath;
+      bool fallbackToAppDirectory = false;
+      try {
+        savePath = await FilePicker.saveFile(
+          dialogTitle: 'CSV exportieren',
+          fileName: fileName,
+          type: FileType.custom,
+          allowedExtensions: ['csv'],
+        );
+      } on UnimplementedError {
+        // Fall back to directory selection if saveFile is not supported.
+        savePath = await FilePicker.getDirectoryPath(
+          dialogTitle: 'Speicherort wählen',
+        );
+        if (savePath != null) {
+          savePath = '$savePath/$fileName';
+        } else {
+          fallbackToAppDirectory = true;
+        }
+      }
+
+      if (savePath == null && !fallbackToAppDirectory) {
+        // Either the user canceled the save dialog or got no valid path.
+        return;
+      }
+
+      if (savePath == null && fallbackToAppDirectory) {
+        final directory = await getApplicationDocumentsDirectory();
+        savePath = '${directory.path}/$fileName';
+      }
+
+      final outFile = File(savePath!);
       await outFile.writeAsString(csv, encoding: utf8);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('CSV erstellt: $fileName — ${members.length} Mitglieder exportiert'),
+            content: Text(
+              fallbackToAppDirectory
+                  ? 'CSV gespeichert im App-Verzeichnis: ${outFile.path}'
+                  : 'CSV gespeichert: ${outFile.path} — ${members.length} Mitglieder exportiert',
+            ),
           ),
         );
       }
@@ -80,7 +127,7 @@ class MemberCsvImportExport {
   static Future<void> importMembersFromCSV(BuildContext context) async {
     try {
       // Pick CSV file
-      final FilePickerResult? result = await FilePicker.platform.pickFiles(
+      final FilePickerResult? result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['csv'],
         allowMultiple: false,
@@ -88,11 +135,27 @@ class MemberCsvImportExport {
 
       if (result == null) return;
 
-      final file = File(result.files.single.path!);
-      final contents = await file.readAsString(encoding: utf8);
+      final filePath = result.files.single.path;
+      late final String contents;
+      if (filePath != null) {
+        final file = File(filePath);
+        contents = await file.readAsString(encoding: utf8);
+      } else if (result.files.single.bytes != null) {
+        contents = utf8.decode(result.files.single.bytes!);
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Konnte ausgewählte CSV-Datei nicht lesen.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
 
-        // Parse CSV using local helper (robust for quoted fields)
-        List<List<dynamic>> csvTable = _parseCsv(contents);
+      // Parse CSV using local helper (robust for quoted fields)
+      List<List<dynamic>> csvTable = _parseCsv(contents);
 
       if (csvTable.isEmpty) {
         if (context.mounted) {
@@ -108,11 +171,7 @@ class MemberCsvImportExport {
 
       // Verify header
       final header = csvTable.first;
-      const requiredHeaders = [
-        'Vorname',
-        'Nachname',
-        'E-Mail',
-      ];
+      const requiredHeaders = ['Vorname', 'Nachname', 'E-Mail'];
 
       bool hasAllHeaders = true;
       for (var h in requiredHeaders) {
@@ -126,7 +185,9 @@ class MemberCsvImportExport {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('CSV-Header ungültig. Erforderlich: Vorname, Nachname, E-Mail'),
+              content: Text(
+                'CSV-Header ungültig. Erforderlich: Vorname, Nachname, E-Mail',
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -153,7 +214,9 @@ class MemberCsvImportExport {
           final clubId = row.length > 9 ? row[9].toString().trim() : '';
 
           if (forename.isEmpty || surname.isEmpty || email.isEmpty) {
-            errors.add('Reihe ${i + 1}: Vorname, Nachname und E-Mail erforderlich');
+            errors.add(
+              'Reihe ${i + 1}: Vorname, Nachname und E-Mail erforderlich',
+            );
             continue;
           }
 
@@ -170,23 +233,27 @@ class MemberCsvImportExport {
           final tempPassword = _generatePassword();
 
           // Create user
-          await pb.collection('users').create(body: {
-            'email': email,
-            'password': tempPassword,
-            'passwordConfirm': tempPassword,
-            'forename': forename,
-            'surname': surname,
-            'phone': phone,
-            'mobile': mobile,
-            'iban': iban,
-            'bic': bic,
-            'bank_name': bankName,
-            'bank_owner': bankOwner,
-            'club_id': clubId,
-            'membership': false,
-            'membership_request': false,
-            'emailVisibility': true,
-          });
+          await pb
+              .collection('users')
+              .create(
+                body: {
+                  'email': email,
+                  'password': tempPassword,
+                  'passwordConfirm': tempPassword,
+                  'forename': forename,
+                  'surname': surname,
+                  'phone': phone,
+                  'mobile': mobile,
+                  'iban': iban,
+                  'bic': bic,
+                  'bank_name': bankName,
+                  'bank_owner': bankOwner,
+                  'club_id': clubId,
+                  'membership': false,
+                  'membership_request': false,
+                  'emailVisibility': true,
+                },
+              );
 
           createdEmails.add(email);
         } catch (e) {
@@ -244,13 +311,19 @@ class MemberCsvImportExport {
   // Simple CSV converter (handles quoting of fields containing commas/newlines/quotes)
   static String _convertToCsv(List<List<dynamic>> rows) {
     String escapeField(String s) {
-      final needQuote = s.contains(',') || s.contains('\n') || s.contains('"') || s.contains('\r');
+      final needQuote =
+          s.contains(',') ||
+          s.contains('\n') ||
+          s.contains('"') ||
+          s.contains('\r');
       var out = s.replaceAll('"', '""');
       if (needQuote) out = '"$out"';
       return out;
     }
 
-    return rows.map((r) => r.map((c) => escapeField(c?.toString() ?? '')).join(',')).join('\n');
+    return rows
+        .map((r) => r.map((c) => escapeField(c?.toString() ?? '')).join(','))
+        .join('\n');
   }
 
   // Simple CSV parser supporting quoted fields and escaped quotes

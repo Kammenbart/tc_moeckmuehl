@@ -8,34 +8,37 @@ import 'dart:async';
 import 'tabs/home_tab.dart';
 import 'tabs/court_tab.dart';
 import 'tabs/drink_tab.dart';
-import 'tabs/profile_tab.dart';
+import 'tabs/notifications_tab.dart';
+import 'tabs/more_menu_tab.dart';
 import 'admin/vorstand_home.dart';
 import 'admin/trainer_home.dart';
 import 'admin/admin_home.dart';
+import 'services/settings_service.dart';
 
-// Deine Settings-Record-ID hier eintragen:
+// Deine Settings-Record-ID hier eintragen (wird für Migration genutzt):
 const String settingsRecordId = 'b9wkhz7wuqxqpid';
+String adminFeedbackEmail = 'vorstand@tc-moeckmuehl.de';
 late final PocketBase pb;
 
 // Globale Farbnutzer
 // Hintergrundfarbe der App
-final ValueNotifier<Color> appBackColor =
-    ValueNotifier<Color>(Colors.white);
+final ValueNotifier<Color> appBackColor = ValueNotifier<Color>(Colors.white);
 
 // Vordergrund / Akzentfarbe (bisher grün)
-final ValueNotifier<Color> appFrontColor =
-    ValueNotifier<Color>(Colors.green);
+final ValueNotifier<Color> appFrontColor = ValueNotifier<Color>(Colors.green);
 
 // Farben für Platzbelegung
-final ValueNotifier<Color> ownBookingColor =
-    ValueNotifier<Color>(Colors.blue); // Eigene Buchungen
+final ValueNotifier<Color> ownBookingColor = ValueNotifier<Color>(
+  Colors.blue,
+); // Eigene Buchungen
 
-final ValueNotifier<Color> otherBookingColor =
-    ValueNotifier<Color>(Colors.red); // Fremde Buchungen
+final ValueNotifier<Color> otherBookingColor = ValueNotifier<Color>(
+  Colors.red,
+); // Fremde Buchungen
 
-final ValueNotifier<Color> eventBookingColor =
-    ValueNotifier<Color>(Colors.purple); // Verbands-/Turnierbuchungen
-
+final ValueNotifier<Color> eventBookingColor = ValueNotifier<Color>(
+  Colors.purple,
+); // Verbands-/Turnierbuchungen
 
 // Hilfsfunktionen für Hex <-> Color
 Color colorFromHex(String? hex, Color fallback) {
@@ -99,13 +102,16 @@ void main() async {
 
   // Optional: gespeicherte Session refreshen (mit Timeout)
   try {
-    await pb.collection('users').authRefresh().timeout(
-      const Duration(seconds: 5),
-      onTimeout: () {
-        debugPrint("Session-Refresh Timeout");
-        throw TimeoutException('Auth refresh timed out');
-      },
-    );
+    await pb
+        .collection('users')
+        .authRefresh()
+        .timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            debugPrint("Session-Refresh Timeout");
+            throw TimeoutException('Auth refresh timed out');
+          },
+        );
   } catch (e) {
     debugPrint("Fehler beim Session-Refresh: $e");
     try {
@@ -115,33 +121,55 @@ void main() async {
     }
   }
 
-  // Globale Farben aus der settings-Collection laden (mit Timeout)
+  // Migrate old combined settings record into individual name/value records and
+  // load required settings.
   try {
-    final settings = await pb
-        .collection('settings')
-        .getOne(settingsRecordId)
-        .timeout(
-          const Duration(seconds: 5),
-          onTimeout: () {
-            debugPrint("Settings-Abfrage Timeout");
-            throw TimeoutException('Settings fetch timed out');
-          },
-        );
+    final settingsSvc = AppSettingsService(pb);
+
+    // Keys we want to ensure exist as individual records
+    final keys = [
+      'app_colour_back',
+      'app_colour_front',
+      'court_color_own',
+      'court_color_other',
+      'court_color_event',
+      'app_support_mail',
+    ];
+
+    // Try migrating from old combined record (safe to fail)
+    await settingsSvc.migrateCombinedRecord(settingsRecordId, keys);
+
+    // Load the values we need
+    final loaded = await settingsSvc.loadSettings(keys);
 
     appBackColor.value = colorFromHex(
-        settings.getStringValue('app_colour_back'), Colors.white);
+      loaded['app_colour_back'],
+      Colors.white,
+    );
     appFrontColor.value = colorFromHex(
-        settings.getStringValue('app_colour_front'), Colors.green);
+      loaded['app_colour_front'],
+      Colors.green,
+    );
 
     ownBookingColor.value = colorFromHex(
-        settings.getStringValue('court_color_own'), Colors.blue);
+      loaded['court_color_own'],
+      Colors.blue,
+    );
     otherBookingColor.value = colorFromHex(
-        settings.getStringValue('court_color_other'), Colors.red);
+      loaded['court_color_other'],
+      Colors.red,
+    );
     eventBookingColor.value = colorFromHex(
-        settings.getStringValue('court_color_event'), Colors.purple);
+      loaded['court_color_event'],
+      Colors.purple,
+    );
+
+    if (loaded['app_support_mail'] != null && loaded['app_support_mail']!.isNotEmpty) {
+      adminFeedbackEmail = loaded['app_support_mail']!;
+    }
   } catch (e) {
-    debugPrint("Fehler beim Laden der Farben: $e");
-    // Falls Laden fehlschlägt, bleiben die Standardfarben
+    debugPrint("Fehler beim Laden der Farben/Settings: $e");
+    // Falls Laden fehlschlägt, bleiben die Standardwerte
   }
 
   runApp(const TCMoeckmuehlApp());
@@ -166,13 +194,11 @@ class TCMoeckmuehlApp extends StatelessWidget {
                 GlobalWidgetsLocalizations.delegate,
                 GlobalCupertinoLocalizations.delegate,
               ],
-              supportedLocales: const [
-                Locale('de', 'DE'),
-              ],
+              supportedLocales: const [Locale('de', 'DE')],
               locale: const Locale('de', 'DE'),
               theme: ThemeData(
-                colorSchemeSeed: frontColor,          // Akzent/Vordergrund
-                scaffoldBackgroundColor: backColor,   // Hintergrund
+                colorSchemeSeed: frontColor, // Akzent/Vordergrund
+                scaffoldBackgroundColor: backColor, // Hintergrund
                 appBarTheme: AppBarTheme(
                   backgroundColor: frontColor,
                   foregroundColor: Colors.white,
@@ -296,8 +322,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
                       ? const [AutofillHints.password]
                       : const [AutofillHints.newPassword],
                   textInputAction: TextInputAction.done,
-                  onEditingComplete: () =>
-                      isLoginMode ? _login() : _register(),
+                  onEditingComplete: () => isLoginMode ? _login() : _register(),
                 ),
 
                 // Passwort vergessen (nur Login)
@@ -323,8 +348,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
                           foregroundColor: Colors.white,
                         ),
                         onPressed: isLoginMode ? _login : _register,
-                        child:
-                            Text(isLoginMode ? "Einloggen" : "Registrieren"),
+                        child: Text(isLoginMode ? "Einloggen" : "Registrieren"),
                       ),
                       const SizedBox(height: 15),
                       TextButton(
@@ -347,102 +371,107 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   Future<void> _login() async {
-  setState(() => isLoading = true);
-  try {
-    await pb.collection('users').authWithPassword(
-      emailController.text.trim(),
-      passwordController.text,
-    );
+    setState(() => isLoading = true);
+    try {
+      await pb
+          .collection('users')
+          .authWithPassword(
+            emailController.text.trim(),
+            passwordController.text,
+          );
 
-    // Login ok → HomeScreen
-    setState(() {}); 
-  } catch (e) {
-    debugPrint("Login-Fehler: $e");
+      // Login ok → HomeScreen
+      setState(() {});
+    } catch (e) {
+      debugPrint("Login-Fehler: $e");
 
-    if (e is ClientException) {
-      final msg = (e.response['message'] ?? '').toString().toLowerCase();
+      if (e is ClientException) {
+        final msg = (e.response['message'] ?? '').toString().toLowerCase();
 
-      // Spezielle Meldung für "E-Mail noch nicht verifiziert"
-      if (msg.contains('verify') && msg.contains('email')) {
-        _showError(
-          "E-Mail-Adresse noch nicht bestätigt.\n"
-          "Bitte E-Mail öffnen und den Bestätigungslink anklicken.",
-        );
-        return;
+        // Spezielle Meldung für "E-Mail noch nicht verifiziert"
+        if (msg.contains('verify') && msg.contains('email')) {
+          _showError(
+            "E-Mail-Adresse noch nicht bestätigt.\n"
+            "Bitte E-Mail öffnen und den Bestätigungslink anklicken.",
+          );
+          return;
+        }
+      }
+
+      _showError("Login fehlgeschlagen. Daten prüfen.");
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
       }
     }
-
-    _showError("Login fehlgeschlagen. Daten prüfen.");
-  } finally {
-    if (mounted) {
-      setState(() => isLoading = false);
-    }
   }
-}
 
   Future<void> _register() async {
-  if (forenameController.text.isEmpty ||
-      surnameController.text.isEmpty ||
-      emailController.text.isEmpty ||
-      passwordController.text.length < 8) {
-    _showError(
-      "Bitte alle Felder füllen (Vorname, Nachname, E-Mail, Passwort min. 8 Zeichen).",
-    );
-    return;
-  }
-
-  setState(() => isLoading = true);
-  try {
-    // 1. User anlegen
-    await pb.collection('users').create(body: {
-      "email": emailController.text.trim(),
-      "password": passwordController.text,
-      "passwordConfirm": passwordController.text,
-      "forename": forenameController.text.trim(),
-      "surname": surnameController.text.trim(),
-      "name":
-          "${forenameController.text.trim()} ${surnameController.text.trim()}",
-    });
-
-    // 2. Verifizierungs-Mail auslösen
-    await pb.collection('users').requestVerification(
-      emailController.text.trim(),
-    );
-
-    // 3. Hinweis anzeigen und auf Login umschalten
-    _showSuccess(
-      "Registrierung erfolgreich.\nBitte E-Mail-Adresse bestätigen, bevor du dich einloggst.",
-    );
-    setState(() => isLoginMode = true);
-  } catch (e) {
-    // Spezifische Meldung, wenn E-Mail schon existiert
-    if (e is ClientException) {
-      final msg = (e.response['message'] ?? '').toString().toLowerCase();
-      final data = e.response['data'] as Map<String, dynamic>?;
-
-      final emailError = data?['email']?['message']?.toString().toLowerCase();
-
-      if (emailError != null &&
-          (emailError.contains('exists') ||
-           emailError.contains('already'))) {
-        _showError("Diese E-Mail-Adresse ist bereits registriert.");
-        return;
-      }
-
-      if (msg.contains('exists') || msg.contains('already')) {
-        _showError("Diese E-Mail-Adresse ist bereits registriert.");
-        return;
-      }
+    if (forenameController.text.isEmpty ||
+        surnameController.text.isEmpty ||
+        emailController.text.isEmpty ||
+        passwordController.text.length < 8) {
+      _showError(
+        "Bitte alle Felder füllen (Vorname, Nachname, E-Mail, Passwort min. 8 Zeichen).",
+      );
+      return;
     }
 
-    _showError("Registrierung fehlgeschlagen: $e");
-  } finally {
-    if (mounted) {
-      setState(() => isLoading = false);
+    setState(() => isLoading = true);
+    try {
+      // 1. User anlegen
+      await pb
+          .collection('users')
+          .create(
+            body: {
+              "email": emailController.text.trim(),
+              "password": passwordController.text,
+              "passwordConfirm": passwordController.text,
+              "forename": forenameController.text.trim(),
+              "surname": surnameController.text.trim(),
+              "name":
+                  "${forenameController.text.trim()} ${surnameController.text.trim()}",
+            },
+          );
+
+      // 2. Verifizierungs-Mail auslösen
+      await pb
+          .collection('users')
+          .requestVerification(emailController.text.trim());
+
+      // 3. Hinweis anzeigen und auf Login umschalten
+      _showSuccess(
+        "Registrierung erfolgreich.\nBitte E-Mail-Adresse bestätigen, bevor du dich einloggst.",
+      );
+      setState(() => isLoginMode = true);
+    } catch (e) {
+      // Spezifische Meldung, wenn E-Mail schon existiert
+      if (e is ClientException) {
+        final msg = (e.response['message'] ?? '').toString().toLowerCase();
+        final data = e.response['data'] as Map<String, dynamic>?;
+
+        final emailError = data?['email']?['message']?.toString().toLowerCase();
+
+        if (emailError != null &&
+            (emailError.contains('exists') || emailError.contains('already'))) {
+          _showError("Diese E-Mail-Adresse ist bereits registriert.");
+          return;
+        }
+
+        if (msg.contains('exists') || msg.contains('already')) {
+          _showError("Diese E-Mail-Adresse ist bereits registriert.");
+          return;
+        }
+      }
+
+      _showError("Registrierung fehlgeschlagen: $e");
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
     }
   }
-}
-  
+
   Future<void> _resetPassword() async {
     if (emailController.text.isEmpty) {
       _showError("Bitte E-Mail eingeben, um Passwort zurückzusetzen.");
@@ -459,15 +488,15 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   void _showError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.red),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
   }
 
   void _showSuccess(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.green),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green));
   }
 }
 
@@ -485,119 +514,136 @@ class _HomeScreenState extends State<HomeScreen> {
   void jumpToCourtTab(DateTime date) {
     setState(() {
       _targetDate = date; // Datum speichern
-      _index = 1;         // Tab wechseln
+      _index = 1; // Tab wechseln
     });
   }
-  
+
   @override
   Widget build(BuildContext context) {
-    final user = pb.authStore.model;
-    if (user == null) return const AuthWrapper();
-
-    final record = user as RecordModel;
+    final record = pb.authStore.record;
+    if (record == null) return const AuthWrapper();
 
     // Admin-Rollen
-    final isAppAdmin     = record.getBoolValue('auth_admin_app');
-    final isBoardAdmin   = record.getBoolValue('auth_admin_board');
+    final isAppAdmin = record.getBoolValue('auth_admin_app');
+    final isBoardAdmin = record.getBoolValue('auth_admin_board');
     final isTrainerAdmin = record.getBoolValue('auth_admin_trainer');
 
     // Vorstands-Rechte
-    final permBoardMember   = record.getIntValue('perm_board_member');
-    final permBoardCash     = record.getIntValue('perm_board_cash');
-    final permBoardBooking  = record.getIntValue('perm_board_booking');
+    final permBoardMember = record.getIntValue('perm_board_member');
+    final permBoardCash = record.getIntValue('perm_board_cash');
+    final permBoardBooking = record.getIntValue('perm_board_booking');
     final permBoardBeverage = record.getIntValue('perm_board_beverage');
 
     // Trainer-Rechte
-    final permTrainerTrainer  = record.getIntValue('perm_trainer_trainer');
-    final permTrainerMember   = record.getIntValue('perm_trainer_member');
-    final permTrainerBill     = record.getIntValue('perm_trainer_bill');
+    final permTrainerTrainer = record.getIntValue('perm_trainer_trainer');
+    final permTrainerMember = record.getIntValue('perm_trainer_member');
+    final permTrainerBill = record.getIntValue('perm_trainer_bill');
     final permTrainerReminder = record.getIntValue('perm_trainer_reminder');
 
     // Hat irgendein Vorstandsrecht oder ist Board-Admin/App-Admin?
-    final hasBoardRight = isAppAdmin ||
+    final hasBoardRight =
+        isAppAdmin ||
         isBoardAdmin ||
-        permBoardMember   > 0 ||
-        permBoardCash     > 0 ||
-        permBoardBooking  > 0 ||
+        permBoardMember > 0 ||
+        permBoardCash > 0 ||
+        permBoardBooking > 0 ||
         permBoardBeverage > 0;
 
     // Hat irgendein Trainerrecht oder ist Trainer-Admin/App-Admin?
-    final hasTrainerRight = isAppAdmin ||
+    final hasTrainerRight =
+        isAppAdmin ||
         isTrainerAdmin ||
-        permTrainerTrainer  > 0 ||
-        permTrainerMember   > 0 ||
-        permTrainerBill     > 0 ||
+        permTrainerTrainer > 0 ||
+        permTrainerMember > 0 ||
+        permTrainerBill > 0 ||
         permTrainerReminder > 0;
 
     // Rechte in eine Liste packen
-    final List<_RoleEntry> roles = [];
+    final List<RoleEntry> roles = [];
 
     // Vorstand-Button anzeigen, wenn irgendein Board-Recht
     if (hasBoardRight) {
-      roles.add(_RoleEntry(
-        label: 'Vorstand',
-        icon: Icons.account_balance,
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => const VorstandHomeScreen(),
-            ),
-          );
-        },
-      ));
+      roles.add(
+        RoleEntry(
+          label: 'Vorstand',
+          icon: Icons.account_balance,
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const VorstandHomeScreen()),
+            );
+          },
+        ),
+      );
     }
 
     // Trainer-Button anzeigen, wenn irgendein Trainer-Recht
     if (hasTrainerRight) {
-      roles.add(_RoleEntry(
-        label: 'Trainer',
-        icon: Icons.fitness_center,
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => const TrainerHomeScreen(),
-            ),
-          );
-        },
-      ));
+      roles.add(
+        RoleEntry(
+          label: 'Trainer',
+          icon: Icons.fitness_center,
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const TrainerHomeScreen()),
+            );
+          },
+        ),
+      );
     }
 
     // Admin-Button nur für App-Admin
     if (isAppAdmin) {
-      roles.add(_RoleEntry(
-        label: 'Admin',
-        icon: Icons.settings,
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => const AdminHomeScreen(),
-            ),
-          );
-        },
-      ));
+      roles.add(
+        RoleEntry(
+          label: 'Admin',
+          icon: Icons.settings,
+          onTap: () {
+            Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const AdminHomeScreen()));
+          },
+        ),
+      );
     }
 
-        return Scaffold(
-            body: IndexedStack(
+    return Scaffold(
+      body: IndexedStack(
         index: _index,
         children: [
           HomeTab(onNavigateToCourt: jumpToCourtTab), // Kein const!
-          CourtTab(key: ValueKey(_targetDate), initialDate: _targetDate), // Kein const!
+          CourtTab(
+            key: ValueKey(_targetDate),
+            initialDate: _targetDate,
+          ), // Kein const!
           const DrinkTab(),
-          ProfileTab(onLogout: () => setState(() => pb.authStore.clear())),
+          const NotificationsTab(),
+          const MoreMenuTab(),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _index,
-        onTap: (v) => setState(() => _index = v),
+        onTap: (v) {
+          if (v == _index) return;
+          setState(() => _index = v);
+        },
         type: BottomNavigationBarType.fixed,
         selectedItemColor: appFrontColor.value,
         unselectedItemColor: Colors.grey,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "Start"),
-          BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: "Plätze"),
-          BottomNavigationBarItem(icon: Icon(Icons.local_drink), label: "Getränke"),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profil"),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_month),
+            label: "Plätze",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.local_drink),
+            label: "Getränke",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.notifications),
+            label: "Mitteilungen",
+          ),
+          BottomNavigationBarItem(icon: Icon(Icons.menu), label: "Menü"),
         ],
       ),
       floatingActionButton: roles.isEmpty
@@ -611,19 +657,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _RoleEntry {
+class RoleEntry {
   final String label;
   final IconData icon;
   final VoidCallback onTap;
 
-  _RoleEntry({
-    required this.label,
-    required this.icon,
-    required this.onTap,
-  });
+  RoleEntry({required this.label, required this.icon, required this.onTap});
 }
+
 class RoleFab extends StatefulWidget {
-  final List<_RoleEntry> roles;
+  final List<RoleEntry> roles;
   const RoleFab({super.key, required this.roles});
 
   @override
@@ -648,10 +691,7 @@ class _RoleFabState extends State<RoleFab> {
         heroTag: 'fab_single_role',
         onPressed: r.onTap,
         backgroundColor: appFrontColor.value,
-        child: Icon(
-          r.icon,
-          color: Colors.white,
-        ),
+        child: Icon(r.icon, color: Colors.white),
       );
     }
 
@@ -674,10 +714,7 @@ class _RoleFabState extends State<RoleFab> {
                   heroTag: 'fab_role_$index',
                   backgroundColor: appFrontColor.value,
                   onPressed: r.onTap,
-                  child: Icon(
-                    r.icon,
-                    color: Colors.white,
-                  ),
+                  child: Icon(r.icon, color: Colors.white),
                 ),
               );
             }),

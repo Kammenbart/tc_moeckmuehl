@@ -16,7 +16,6 @@ class VorstandInvoiceTab extends StatefulWidget {
 class _VorstandInvoiceTabState extends State<VorstandInvoiceTab> {
   List<RecordModel> invoices = [];
   bool isLoading = true;
-  int selectedTab = 0; // 0: pending, 1: approved, 2: rejected
 
   @override
   void initState() {
@@ -37,11 +36,13 @@ class _VorstandInvoiceTabState extends State<VorstandInvoiceTab> {
         filter = 'submitted_by = "${user.id}"';
       }
 
-      final result = await pb.collection('invoices').getFullList(
-        sort: '-created',
-        filter: filter.isNotEmpty ? filter : null,
-        expand: 'submitted_by',
-      );
+      final result = await pb
+          .collection('invoices')
+          .getFullList(
+            sort: '-created',
+            filter: filter.isNotEmpty ? filter : null,
+            expand: 'submitted_by',
+          );
 
       if (mounted) {
         setState(() => invoices = result);
@@ -63,7 +64,8 @@ class _VorstandInvoiceTabState extends State<VorstandInvoiceTab> {
     final amountController = TextEditingController();
     PlatformFile? selectedFile;
 
-    final confirmed = await showDialog<bool>(
+    final confirmed =
+        await showDialog<bool>(
           context: context,
           builder: (ctx) => StatefulBuilder(
             builder: (ctx, setDialogState) => AlertDialog(
@@ -87,8 +89,9 @@ class _VorstandInvoiceTabState extends State<VorstandInvoiceTab> {
                         labelText: "Betrag (€)",
                         hintText: "100.50",
                       ),
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Container(
@@ -119,12 +122,11 @@ class _VorstandInvoiceTabState extends State<VorstandInvoiceTab> {
                               icon: const Icon(Icons.attach_file),
                               label: const Text("PDF wählen"),
                               onPressed: () async {
-                                final result =
-                                    await FilePicker.platform.pickFiles(
-                                  type: FileType.custom,
-                                  allowedExtensions: ['pdf'],
-                                  allowMultiple: false,
-                                );
+                                final result = await FilePicker.pickFiles(
+                                      type: FileType.custom,
+                                      allowedExtensions: ['pdf'],
+                                      allowMultiple: false,
+                                    );
 
                                 if (result != null) {
                                   setDialogState(() {
@@ -174,28 +176,29 @@ class _VorstandInvoiceTabState extends State<VorstandInvoiceTab> {
 
       // TODO: Upload PDF to Pocketbase files
       // For now, store metadata
-      await pb.collection('invoices').create(body: {
-        'submitted_by': user.id,
-        'description': descriptionController.text,
-        'amount': amount,
-        'status': 'pending', // pending, approved, rejected, paid
-        'file_name': selectedFile!.name,
-        'submission_date': DateTime.now().toIso8601String(),
-      });
+      await pb
+          .collection('invoices')
+          .create(
+            body: {
+              'submitted_by': user.id,
+              'description': descriptionController.text,
+              'amount': amount,
+              'status': 'pending', // pending, approved, rejected, paid
+              'file_name': selectedFile!.name,
+              'submission_date': DateTime.now().toIso8601String(),
+            },
+          );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Rechnung eingereicht.")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Rechnung eingereicht.")));
         _loadInvoices();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Fehler: $e"),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text("Fehler: $e"), backgroundColor: Colors.red),
         );
       }
     }
@@ -203,25 +206,27 @@ class _VorstandInvoiceTabState extends State<VorstandInvoiceTab> {
 
   Future<void> _approveInvoice(RecordModel invoice) async {
     try {
-      await pb.collection('invoices').update(invoice.id, body: {
-        'status': 'approved',
-        'approved_by': pb.authStore.record!.id,
-        'approved_date': DateTime.now().toIso8601String(),
-      });
+      await pb
+          .collection('invoices')
+          .update(
+            invoice.id,
+            body: {
+              'status': 'approved',
+              'approved_by': pb.authStore.record!.id,
+              'approved_date': DateTime.now().toIso8601String(),
+            },
+          );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Rechnung genehmigt.")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Rechnung genehmigt.")));
         _loadInvoices();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Fehler: $e"),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text("Fehler: $e"), backgroundColor: Colors.red),
         );
       }
     }
@@ -230,7 +235,8 @@ class _VorstandInvoiceTabState extends State<VorstandInvoiceTab> {
   Future<void> _rejectInvoice(RecordModel invoice) async {
     final noteController = TextEditingController();
 
-    final confirmed = await showDialog<bool>(
+    final confirmed =
+        await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text("Rechnung ablehnen"),
@@ -260,26 +266,28 @@ class _VorstandInvoiceTabState extends State<VorstandInvoiceTab> {
     if (!confirmed) return;
 
     try {
-      await pb.collection('invoices').update(invoice.id, body: {
-        'status': 'rejected',
-        'rejected_by': pb.authStore.record!.id,
-        'rejection_reason': noteController.text,
-        'rejected_date': DateTime.now().toIso8601String(),
-      });
+      await pb
+          .collection('invoices')
+          .update(
+            invoice.id,
+            body: {
+              'status': 'rejected',
+              'rejected_by': pb.authStore.record!.id,
+              'rejection_reason': noteController.text,
+              'rejected_date': DateTime.now().toIso8601String(),
+            },
+          );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Rechnung abgelehnt.")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Rechnung abgelehnt.")));
         _loadInvoices();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Fehler: $e"),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text("Fehler: $e"), backgroundColor: Colors.red),
         );
       }
     }
@@ -287,10 +295,15 @@ class _VorstandInvoiceTabState extends State<VorstandInvoiceTab> {
 
   Future<void> _markAsPaid(RecordModel invoice) async {
     try {
-      await pb.collection('invoices').update(invoice.id, body: {
-        'status': 'paid',
-        'paid_date': DateTime.now().toIso8601String(),
-      });
+      await pb
+          .collection('invoices')
+          .update(
+            invoice.id,
+            body: {
+              'status': 'paid',
+              'paid_date': DateTime.now().toIso8601String(),
+            },
+          );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -301,10 +314,7 @@ class _VorstandInvoiceTabState extends State<VorstandInvoiceTab> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Fehler: $e"),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text("Fehler: $e"), backgroundColor: Colors.red),
         );
       }
     }
@@ -348,12 +358,9 @@ class _VorstandInvoiceTabState extends State<VorstandInvoiceTab> {
   Widget build(BuildContext context) {
     final user = pb.authStore.record as RecordModel;
     final isAppAdmin = user.getBoolValue('auth_admin_app');
-    final canSubmit =
-        widget.permission >= 1 || isAppAdmin;
-    final canApprove =
-        widget.permission >= 2 || isAppAdmin;
-    final canManage =
-        widget.permission >= 3 || isAppAdmin;
+    final canSubmit = widget.permission >= 1 || isAppAdmin;
+    final canApprove = widget.permission >= 2 || isAppAdmin;
+    final canManage = widget.permission >= 3 || isAppAdmin;
 
     if (!canSubmit && !canApprove && !canManage) {
       return const Scaffold(
@@ -368,45 +375,39 @@ class _VorstandInvoiceTabState extends State<VorstandInvoiceTab> {
     final rejectedInvoices = _filterByStatus('rejected');
     final paidInvoices = _filterByStatus('paid');
 
+    final tabs = <Tab>[
+      Tab(text: 'Ausstehend (${pendingInvoices.length})'),
+      if (canApprove) Tab(text: 'Genehmigt (${approvedInvoices.length})'),
+      if (canManage) Tab(text: 'Abgelehnt (${rejectedInvoices.length})'),
+      Tab(text: 'Bezahlt (${paidInvoices.length})'),
+    ];
+
+    final tabViews = <Widget>[
+      _buildInvoiceList(pendingInvoices, canApprove),
+      if (canApprove) _buildInvoiceList(approvedInvoices, false),
+      if (canManage) _buildInvoiceList(rejectedInvoices, false),
+      _buildInvoiceList(paidInvoices, false),
+    ];
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Rechnungen"),
-      ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                TabBar(
-                  onTap: (index) => setState(() => selectedTab = index),
-                  tabs: [
-                    Tab(
-                      text: 'Ausstehend (${pendingInvoices.length})',
+          : DefaultTabController(
+              length: tabs.length,
+              child: Column(
+                children: [
+                  Material(
+                    color: Theme.of(context).colorScheme.surface,
+                    child: TabBar(
+                      tabs: tabs,
+                      indicatorColor: appFrontColor.value,
+                      labelColor: Theme.of(context).colorScheme.onSurface,
+                      unselectedLabelColor: Colors.grey,
                     ),
-                    if (canApprove)
-                      Tab(
-                        text: 'Genehmigt (${approvedInvoices.length})',
-                      ),
-                    if (canManage)
-                      Tab(
-                        text: 'Abgelehnt (${rejectedInvoices.length})',
-                      ),
-                    Tab(
-                      text: 'Bezahlt (${paidInvoices.length})',
-                    ),
-                  ],
-                ),
-                Expanded(
-                  child: _buildTabContent(
-                    selectedTab,
-                    pendingInvoices,
-                    approvedInvoices,
-                    rejectedInvoices,
-                    paidInvoices,
-                    canApprove,
-                    canManage,
                   ),
-                ),
-              ],
+                  Expanded(child: TabBarView(children: tabViews)),
+                ],
+              ),
             ),
       floatingActionButton: canSubmit
           ? FloatingActionButton(
@@ -418,26 +419,9 @@ class _VorstandInvoiceTabState extends State<VorstandInvoiceTab> {
     );
   }
 
-  Widget _buildTabContent(
-    int tab,
-    List<RecordModel> pending,
-    List<RecordModel> approved,
-    List<RecordModel> rejected,
-    List<RecordModel> paid,
-    bool canApprove,
-    bool canManage,
-  ) {
-    if (tab == 0) return _buildInvoiceList(pending, canApprove);
-    if (tab == 1 && canApprove) return _buildInvoiceList(approved, false);
-    if (tab == 2 && canManage) return _buildInvoiceList(rejected, false);
-    return _buildInvoiceList(paid, false);
-  }
-
   Widget _buildInvoiceList(List<RecordModel> list, bool showApprovalButtons) {
     if (list.isEmpty) {
-      return const Center(
-        child: Text("Keine Rechnungen"),
-      );
+      return const Center(child: Text("Keine Rechnungen"));
     }
 
     return ListView.builder(
@@ -450,7 +434,9 @@ class _VorstandInvoiceTabState extends State<VorstandInvoiceTab> {
         return Card(
           margin: const EdgeInsets.all(8),
           child: ListTile(
-            title: Text("€ ${invoice.getDoubleValue('amount').toStringAsFixed(2)}"),
+            title: Text(
+              "€ ${invoice.getDoubleValue('amount').toStringAsFixed(2)}",
+            ),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -487,7 +473,9 @@ class _VorstandInvoiceTabState extends State<VorstandInvoiceTab> {
                         const SizedBox(height: 8),
                         Text("Status: ${_statusLabel(status)}"),
                         const SizedBox(height: 12),
-                        if (invoice.getStringValue('rejection_reason').isNotEmpty)
+                        if (invoice
+                            .getStringValue('rejection_reason')
+                            .isNotEmpty)
                           Text(
                             "Ablehnungsgrund: ${invoice.getStringValue('rejection_reason')}",
                             style: const TextStyle(color: Colors.red),
@@ -502,7 +490,9 @@ class _VorstandInvoiceTabState extends State<VorstandInvoiceTab> {
                           Navigator.pop(ctx);
                           _rejectInvoice(invoice);
                         },
-                        style: TextButton.styleFrom(foregroundColor: Colors.red),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.red,
+                        ),
                         child: const Text("Ablehnen"),
                       ),
                       ElevatedButton(

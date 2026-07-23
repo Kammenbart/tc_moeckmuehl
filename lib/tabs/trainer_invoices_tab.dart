@@ -26,10 +26,9 @@ class _TrainerInvoicesTabState extends State<TrainerInvoicesTab> {
     try {
       final user = pb.authStore.record as RecordModel;
 
-      final result = await pb.collection('trainer_invoices').getFullList(
-        filter: 'trainer = "${user.id}"',
+      final result = await pb.collection('invoices').getFullList(
+        filter: 'submitted_by = "${user.id}"',
         sort: '-created',
-        expand: 'customer,items',
       );
 
       if (mounted) {
@@ -89,9 +88,6 @@ class _TrainerInvoicesTabState extends State<TrainerInvoicesTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Rechnungen"),
-      ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : invoices.isEmpty
@@ -104,16 +100,16 @@ class _TrainerInvoicesTabState extends State<TrainerInvoicesTab> {
                     final invoice = invoices[index];
                     final created = DateTime.parse(invoice.created).toLocal();
                     final status = invoice.getStringValue('status');
-                    final amount = invoice.getDoubleValue('total_amount');
-                    final customer = invoice.expand['customer']?[0];
-                    final customerName = customer != null
-                        ? "${customer.getStringValue('forename')} ${customer.getStringValue('surname')}"
-                        : "Unbekannter Kunde";
+                    final amount = invoice.getDoubleValue('amount');
+                    final description = invoice.getStringValue('description');
+                    final titleText = description.isNotEmpty
+                        ? "$description – € ${amount.toStringAsFixed(2)}"
+                        : "Rechnung – € ${amount.toStringAsFixed(2)}";
 
                     return Card(
                       margin: const EdgeInsets.all(8),
                       child: ListTile(
-                        title: Text("€ ${amount.toStringAsFixed(2)} - $customerName"),
+                        title: Text(titleText),
                         subtitle: Text(
                           DateFormat('dd.MM.yyyy', 'de_DE').format(created),
                         ),
@@ -132,8 +128,10 @@ class _TrainerInvoicesTabState extends State<TrainerInvoicesTab> {
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text("Kunde: $customerName"),
-                                  const SizedBox(height: 8),
+                                  if (description.isNotEmpty) ...[
+                                    Text("Beschreibung: $description"),
+                                    const SizedBox(height: 8),
+                                  ],
                                   Text(
                                     "Betrag: € ${amount.toStringAsFixed(2)}",
                                     style: const TextStyle(

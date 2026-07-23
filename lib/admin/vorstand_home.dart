@@ -1,14 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:pocketbase/pocketbase.dart';
 import 'package:tc_moeckmuehl/tabs/vorstand_members_tab.dart';
 
 import '../main.dart';
 import '../tabs/vorstand_dashboard_tab.dart';
-import '../tabs/vorstand_kasse_tab.dart';
-import '../tabs/vorstand_bookings_tab.dart';
-import '../tabs/vorstand_notifications_tab.dart';
 import '../tabs/vorstand_news_tab.dart';
-import '../tabs/vorstand_membership_tab.dart';
 import '../tabs/vorstand_invoice_tab.dart';
 
 class VorstandHomeScreen extends StatefulWidget {
@@ -24,6 +19,8 @@ class _VorstandHomeScreenState extends State<VorstandHomeScreen> {
   int kassePerm = 0;
   int bookingPerm = 0;
   int newsPerm = 0;
+  int pendingMemberRequests = 0;
+  List<Widget>? _memberAppBarActions;
   bool _loadedPerms = false;
 
   @override
@@ -34,18 +31,22 @@ class _VorstandHomeScreenState extends State<VorstandHomeScreen> {
 
   Future<void> _loadPermissions() async {
     try {
-      final user = pb.authStore.model as RecordModel;
-        setState(() {
-          final isAppAdmin = user.getBoolValue('auth_admin_app');
+      final user = pb.authStore.record;
+      if (user == null) {
+        setState(() => _loadedPerms = true);
+        return;
+      }
+      setState(() {
+        final isAppAdmin = user.getBoolValue('auth_admin_app');
 
-          // App-Admin bekommt automatisch Vollzugriff (3 = lesen+schreiben+löschen)
-          memberPerm  = isAppAdmin ? 3 : user.getIntValue('perm_board_member');
-          kassePerm   = isAppAdmin ? 3 : user.getIntValue('perm_board_cash');
-          bookingPerm = isAppAdmin ? 3 : user.getIntValue('perm_board_booking');
-          newsPerm    = isAppAdmin ? 2 : user.getIntValue('perm_board_news');
+        // App-Admin bekommt automatisch Vollzugriff (3 = lesen+schreiben+löschen)
+        memberPerm = isAppAdmin ? 3 : user.getIntValue('perm_board_member');
+        kassePerm = isAppAdmin ? 3 : user.getIntValue('perm_board_cash');
+        bookingPerm = isAppAdmin ? 3 : user.getIntValue('perm_board_booking');
+        newsPerm = isAppAdmin ? 2 : user.getIntValue('perm_board_news');
 
-          _loadedPerms = true;
-        });
+        _loadedPerms = true;
+      });
     } catch (e) {
       debugPrint("Fehler beim Laden der Rechte: $e");
       setState(() => _loadedPerms = true);
@@ -55,48 +56,46 @@ class _VorstandHomeScreenState extends State<VorstandHomeScreen> {
   @override
   Widget build(BuildContext context) {
     if (!_loadedPerms) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     // Die Liste der Tabs
     final tabs = [
       const VorstandDashboardTab(),
-      VorstandMembersTab(permission: memberPerm),
-      VorstandMembershipTab(permission: memberPerm),
-      VorstandKasseTab(permission: kassePerm),
+      VorstandMembersTab(
+        permission: memberPerm,
+        onPendingRequestsChanged: (count) {
+          setState(() => pendingMemberRequests = count);
+        },
+        onAppBarActionsChanged: (actions) {
+          setState(() => _memberAppBarActions = actions);
+        },
+      ),
       VorstandInvoiceTab(permission: kassePerm),
-      VorstandBookingsTab(permission: bookingPerm),
       VorstandNewsTab(permission: newsPerm),
-      const VorstandNotificationsTab(),
     ];
 
     // Steuerung der klickbaren Bereiche
-    final user = pb.authStore.model as RecordModel;
+    final user = pb.authStore.record;
+    if (user == null) {
+      return const AuthWrapper();
+    }
     final isAppAdmin = user.getBoolValue('auth_admin_app');
 
     final List<bool> enabled = [
-      true,                        // Dashboard immer an
-      isAppAdmin || memberPerm > 0,   // Mitglieder nur bei Recht oder App-Admin
-      isAppAdmin || memberPerm >= 3,  // Mitgliedschaften verwalten nur bei Recht >= 3
-      isAppAdmin || kassePerm > 0,    // Kasse nur bei Recht oder App-Admin
-      isAppAdmin || kassePerm > 0,    // Rechnungen nur bei Kasse-Recht
-      isAppAdmin || bookingPerm > 0,  // Buchungen nur bei Recht oder App-Admin
-      isAppAdmin || newsPerm > 0,     // News nur bei Recht oder App-Admin
-      true,                           // Mitteilungen immer an
+      true, // Dashboard immer an
+      isAppAdmin || memberPerm > 0, // Mitglieder nur bei Recht oder App-Admin
+      isAppAdmin || kassePerm > 0, // Finanzen nur bei Recht oder App-Admin
+      isAppAdmin || newsPerm > 0, // News nur bei Recht oder App-Admin
     ];
 
     return Scaffold(
       appBar: AppBar(
         title: const Text("Vorstand"),
+        actions: _index == 1 ? _memberAppBarActions : null,
       ),
 
-
-      body: IndexedStack(
-        index: _index,
-        children: tabs,
-      ),
+      body: IndexedStack(index: _index, children: tabs),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _index,
         onTap: (v) {
@@ -104,7 +103,9 @@ class _VorstandHomeScreenState extends State<VorstandHomeScreen> {
             setState(() => _index = v);
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Bereich gesperrt (unzureichende Rechte)")),
+              const SnackBar(
+                content: Text("Bereich gesperrt (unzureichende Rechte)"),
+              ),
             );
           }
         },
@@ -113,36 +114,47 @@ class _VorstandHomeScreenState extends State<VorstandHomeScreen> {
         unselectedItemColor: Colors.grey,
         items: [
           const BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard), 
-            label: "Dashboard"
+            icon: Icon(Icons.dashboard),
+            label: "Dashboard",
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.group, color: memberPerm > 0 ? null : Colors.grey.shade400),
+            icon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(
+                  Icons.group,
+                  color: memberPerm > 0 ? null : Colors.grey.shade400,
+                ),
+                if (pendingMemberRequests > 0)
+                  Positioned(
+                    right: -6,
+                    top: -6,
+                    child: Container(
+                      width: 16,
+                      height: 16,
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
             label: "Mitglieder",
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.person_add, color: memberPerm >= 3 ? null : Colors.grey.shade400),
-            label: "Bewerbungen",
+            icon: Icon(
+              Icons.account_balance_wallet,
+              color: kassePerm > 0 ? null : Colors.grey.shade400,
+            ),
+            label: "Finanzen",
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.account_balance_wallet, color: kassePerm > 0 ? null : Colors.grey.shade400),
-            label: "Kasse",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.receipt, color: kassePerm > 0 ? null : Colors.grey.shade400),
-            label: "Rechnungen",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.event, color: bookingPerm > 0 ? null : Colors.grey.shade400),
-            label: "Buchungen",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.newspaper, color: newsPerm > 0 ? null : Colors.grey.shade400),
+            icon: Icon(
+              Icons.newspaper,
+              color: newsPerm > 0 ? null : Colors.grey.shade400,
+            ),
             label: "Aktuelles",
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.notifications), 
-            label: "Mitteilungen"
           ),
         ],
       ),

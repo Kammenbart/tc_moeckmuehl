@@ -112,9 +112,6 @@ class _TrainerRemindersTabState extends State<TrainerRemindersTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Mahnungsverzeichnis"),
-      ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : reminders.isEmpty

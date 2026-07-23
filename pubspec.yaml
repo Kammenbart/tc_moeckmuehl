@@ -30,13 +30,13 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  pocketbase: ^0.24.0
+  pocketbase: ^0.24.0+1
   intl: ^0.20.2
   flutter_localizations:
     sdk: flutter
   path_provider: ^2.1.5
   shared_preferences: ^2.2.2
-  file_picker: ^6.2.1
+  file_picker: ^11.0.2
   csv: ^8.0.0
   mailer: ^7.1.0
 

@@ -31,7 +31,7 @@ class _VorstandNewsTabState extends State<VorstandNewsTab> {
       final user = pb.authStore.record as RecordModel;
       final userId = user.id;
       final isAppAdmin = user.getBoolValue('auth_admin_app');
-      
+
       // Load news based on permission
       String filter = '';
       if (widget.permission == 1 && !isAppAdmin) {
@@ -40,10 +40,12 @@ class _VorstandNewsTabState extends State<VorstandNewsTab> {
       }
       // For permission 2 or app admin, show all news
 
-      final result = await pb.collection('news').getFullList(
-        sort: '-created',
-        filter: filter.isNotEmpty ? filter : null,
-      );
+      final result = await pb
+          .collection('news')
+          .getFullList(
+            sort: '-created',
+            filter: filter.isNotEmpty ? filter : null,
+          );
 
       if (mounted) {
         setState(() {
@@ -68,33 +70,37 @@ class _VorstandNewsTabState extends State<VorstandNewsTab> {
   }
 
   Future<void> _deleteNews(RecordModel newsItem) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("News löschen?"),
-        content: const Text("Diese Aktion kann nicht rückgängig gemacht werden."),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text("Abbrechen"),
+    final confirm =
+        await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text("News löschen?"),
+            content: const Text(
+              "Diese Aktion kann nicht rückgängig gemacht werden.",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text("Abbrechen"),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                child: const Text("Löschen"),
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text("Löschen"),
-          ),
-        ],
-      ),
-    ) ?? false;
+        ) ??
+        false;
 
     if (!confirm) return;
 
     try {
       await pb.collection('news').delete(newsItem.id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("News gelöscht.")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("News gelöscht.")));
         _loadNews();
       }
     } catch (e) {
@@ -116,8 +122,10 @@ class _VorstandNewsTabState extends State<VorstandNewsTab> {
     );
 
     final user = pb.authStore.record as RecordModel;
-    final isCreator = isEdit && newsItem.getStringValue('created_by') == user.id;
-    final canEdit = user.getBoolValue('auth_admin_app') ||
+    final isCreator =
+        isEdit && newsItem.getStringValue('created_by') == user.id;
+    final canEdit =
+        user.getBoolValue('auth_admin_app') ||
         widget.permission >= 2 ||
         (widget.permission == 1 && isCreator);
 
@@ -187,11 +195,7 @@ class _VorstandNewsTabState extends State<VorstandNewsTab> {
 
     try {
       final user = pb.authStore.record as RecordModel;
-      final body = {
-        "title": title,
-        "content": content,
-        "created_by": user.id,
-      };
+      final body = {"title": title, "content": content, "created_by": user.id};
 
       if (id != null) {
         // Update
@@ -221,8 +225,10 @@ class _VorstandNewsTabState extends State<VorstandNewsTab> {
   @override
   Widget build(BuildContext context) {
     if (widget.permission == 0) {
-      return const Center(
-        child: Text("Keine Berechtigung für die Nachrichtenverwaltung."),
+      return const Scaffold(
+        body: Center(
+          child: Text("Keine Berechtigung für die Nachrichtenverwaltung."),
+        ),
       );
     }
 
@@ -235,9 +241,6 @@ class _VorstandNewsTabState extends State<VorstandNewsTab> {
     }).toList();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Aktuelles (News)"),
-      ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : Column(
@@ -272,10 +275,12 @@ class _VorstandNewsTabState extends State<VorstandNewsTab> {
                           itemCount: filteredNews.length,
                           itemBuilder: (context, index) {
                             final newsItem = filteredNews[index];
-                            final created =
-                                DateTime.parse(newsItem.created).toLocal();
-                            final createdBy =
-                                newsItem.getStringValue('created_by');
+                            final created = DateTime.parse(
+                              newsItem.created,
+                            ).toLocal();
+                            final createdBy = newsItem.getStringValue(
+                              'created_by',
+                            );
                             final currentUser =
                                 (pb.authStore.record as RecordModel).id;
                             final isOwner = createdBy == currentUser;
@@ -299,8 +304,10 @@ class _VorstandNewsTabState extends State<VorstandNewsTab> {
                                     ),
                                     if (widget.permission >= 2 || isOwner)
                                       IconButton(
-                                        icon: const Icon(Icons.delete,
-                                            color: Colors.red),
+                                        icon: const Icon(
+                                          Icons.delete,
+                                          color: Colors.red,
+                                        ),
                                         onPressed: () => _deleteNews(newsItem),
                                       ),
                                   ],

@@ -1,4 +1,4 @@
-package com.example.tc_moeckmuehl
+package de.tcmoeckmuehl.app
 
 import io.flutter.embedding.android.FlutterActivity
 
