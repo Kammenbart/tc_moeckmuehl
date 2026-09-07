@@ -26,6 +26,12 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Diese App benötigt Zugriff auf die Kamera, um Fotos oder Medien direkt aus der App aufnehmen zu können.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Diese App benötigt Ihren Standort, um Standorte oder Buchungen sinnvoll zuzuordnen.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Diese App benötigt Zugriff auf Ihre Fotos, um Bilder aus der Galerie auszuwählen oder zu speichern.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
