@@ -19,6 +19,91 @@ import 'services/settings_service.dart';
 const String settingsRecordId = 'b9wkhz7wuqxqpid';
 String adminFeedbackEmail = 'vorstand@tc-moeckmuehl.de';
 late final PocketBase pb;
+final ValueNotifier<int> openNotificationsBadgeCount = ValueNotifier<int>(0);
+
+Future<int> loadVisibleOpenNotificationCount({RecordModel? userOverride}) async {
+  final user = userOverride ?? pb.authStore.record;
+  if (user == null) return 0;
+
+  try {
+    final all = await pb.collection('notifications').getFullList(
+      sort: '-created',
+      expand: 'decided_by,checked_by',
+    );
+    final visible = all
+        .where((notification) => isVisibleForUserForBadge(notification, user))
+        .toList();
+    return visible.where(isOpenNotificationForBadge).length;
+  } catch (_) {
+    return 0;
+  }
+}
+
+bool isVisibleForUserForBadge(RecordModel notification, RecordModel user) {
+  final myUserTokens = <String>{
+    user.id.toLowerCase(),
+    user.getStringValue('email').trim().toLowerCase(),
+    user.getStringValue('username').trim().toLowerCase(),
+  }..removeWhere((e) => e.isEmpty);
+
+  final directUserTokens = <String>{
+    notification.getStringValue('user').trim().toLowerCase(),
+    ...List<String>.from(notification.getListValue('user').cast<String>())
+        .map((e) => e.trim().toLowerCase()),
+    notification.getStringValue('user_email').trim().toLowerCase(),
+  }..removeWhere((e) => e.isEmpty);
+
+  final isDirectUser = directUserTokens.any(myUserTokens.contains);
+
+  final myGroups = <String>{};
+  if (user.getBoolValue('auth_admin_board')) {
+    myGroups
+      ..add('auth_admin_board')
+      ..add('board')
+      ..add('vorstand');
+  }
+  if (user.getBoolValue('auth_admin_trainer')) {
+    myGroups
+      ..add('auth_admin_trainer')
+      ..add('trainer');
+  }
+  if (user.getBoolValue('auth_admin_app')) {
+    myGroups
+      ..add('auth_admin_app')
+      ..add('app')
+      ..add('admin_app');
+  }
+
+  final rawScope = notification.getStringValue('scope').trim();
+  final scopeAsList = List<String>.from(
+    notification.getListValue('scope').cast<String>(),
+  );
+
+  final scopeTokens = <String>{...scopeAsList};
+  if (rawScope.isNotEmpty) {
+    scopeTokens.addAll(
+      rawScope
+          .split(RegExp(r'[,;\s]+'))
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty),
+    );
+    scopeTokens.add(rawScope);
+  }
+
+  final normalizedScopes = scopeTokens
+      .map((e) => e.trim().toLowerCase())
+      .where((e) => e.isNotEmpty)
+      .toSet();
+
+  final hasGroupScope = myGroups.any(normalizedScopes.contains);
+  return isDirectUser || hasGroupScope;
+}
+
+bool isOpenNotificationForBadge(RecordModel notification) {
+  final state = notification.getStringValue('state').trim();
+  final decisionState = notification.getStringValue('decision_state').trim();
+  return state.isEmpty && decisionState != 'applied' && decisionState != 'failed';
+}
 
 // Globale Farbnutzer
 // Hintergrundfarbe der App
@@ -511,11 +596,54 @@ class _HomeScreenState extends State<HomeScreen> {
   int _index = 0;
   DateTime? _targetDate;
 
+  @override
+  void initState() {
+    super.initState();
+    _refreshNotificationsBadge();
+  }
+
   void jumpToCourtTab(DateTime date) {
     setState(() {
       _targetDate = date; // Datum speichern
       _index = 1; // Tab wechseln
     });
+  }
+
+  Future<void> _refreshNotificationsBadge() async {
+    final count = await loadVisibleOpenNotificationCount();
+    if (!mounted) return;
+    openNotificationsBadgeCount.value = count;
+  }
+
+  Widget _buildNotificationsIcon(int badgeCount) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        const Icon(Icons.notifications),
+        if (badgeCount > 0)
+          Positioned(
+            top: -2,
+            right: -4,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+              child: Text(
+                badgeCount > 99 ? '99+' : badgeCount.toString(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
   @override
@@ -620,31 +748,39 @@ class _HomeScreenState extends State<HomeScreen> {
           const MoreMenuTab(),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _index,
-        onTap: (v) {
-          if (v == _index) return;
-          setState(() => _index = v);
+      bottomNavigationBar: ValueListenableBuilder<int>(
+        valueListenable: openNotificationsBadgeCount,
+        builder: (context, badgeCount, _) {
+          return BottomNavigationBar(
+            currentIndex: _index,
+            onTap: (v) async {
+              if (v == _index) return;
+              setState(() => _index = v);
+              if (v == 3) {
+                await _refreshNotificationsBadge();
+              }
+            },
+            type: BottomNavigationBarType.fixed,
+            selectedItemColor: appFrontColor.value,
+            unselectedItemColor: Colors.grey,
+            items: [
+              const BottomNavigationBarItem(icon: Icon(Icons.home), label: "Start"),
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.calendar_month),
+                label: "Plätze",
+              ),
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.local_drink),
+                label: "Getränke",
+              ),
+              BottomNavigationBarItem(
+                icon: _buildNotificationsIcon(badgeCount),
+                label: "Mitteilungen",
+              ),
+              const BottomNavigationBarItem(icon: Icon(Icons.menu), label: "Menü"),
+            ],
+          );
         },
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: appFrontColor.value,
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Start"),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_month),
-            label: "Plätze",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.local_drink),
-            label: "Getränke",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.notifications),
-            label: "Mitteilungen",
-          ),
-          BottomNavigationBarItem(icon: Icon(Icons.menu), label: "Menü"),
-        ],
       ),
       floatingActionButton: roles.isEmpty
           ? null

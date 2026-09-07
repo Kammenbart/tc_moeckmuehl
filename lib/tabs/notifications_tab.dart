@@ -45,10 +45,13 @@ class _NotificationsTabState extends State<NotificationsTab> {
         ..sort(_compareNotifications);
 
       if (!mounted) return;
+      final openCount = filtered.where(isOpenNotificationForBadge).length;
+      if (!mounted) return;
       setState(() {
         items = filtered;
         loading = false;
       });
+      openNotificationsBadgeCount.value = openCount;
     } catch (e) {
       if (!mounted) return;
       setState(() => loading = false);
